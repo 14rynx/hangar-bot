@@ -1,6 +1,8 @@
 from esi.oauth import load_token
 from assets import Assets
 
+CLIENT_ID = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 # If the token does not exist it will be created and you have to log in to eve
 character_id, access_token = load_token("tokens/my_token.json")
 

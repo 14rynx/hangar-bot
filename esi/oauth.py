@@ -8,8 +8,6 @@ import requests
 
 from esi.jwt import validate_eve_jwt
 
-CLIENT_ID = "6207baec2588400f9366a461b903fc61"
-
 
 def print_auth_url(client_id, code_challenge=None):
     """Prints the URL to redirect users to.
@@ -56,7 +54,7 @@ def send_token_request(form_values):
     return res
 
 
-def generate_token():
+def generate_token(client_id):
     # Generate the PKCE code challenge
     random = base64.urlsafe_b64encode(secrets.token_bytes(32))
     m = hashlib.sha256()
@@ -64,7 +62,7 @@ def generate_token():
     d = m.digest()
     code_challenge = base64.urlsafe_b64encode(d).decode().replace("=", "")
 
-    print_auth_url(CLIENT_ID, code_challenge=code_challenge)
+    print_auth_url(client_id, code_challenge=code_challenge)
 
     auth_code = input("Copy the \"code\" query parameter and enter it here: ")
 
@@ -72,7 +70,7 @@ def generate_token():
 
     form_values = {
         "grant_type": "authorization_code",
-        "client_id": CLIENT_ID,
+        "client_id": client_id,
         "code": auth_code,
         "code_verifier": code_verifier
     }
@@ -88,11 +86,11 @@ def generate_token():
         return character_id, data["access_token"], data["refresh_token"]
 
 
-def renew_token(refresh_token):
+def renew_token(refresh_token, client_id):
     form_values = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": CLIENT_ID
+        "client_id": client_id
     }
 
     headers = {
@@ -114,13 +112,13 @@ def renew_token(refresh_token):
         return character_id, data["access_token"], data["refresh_token"]
 
 
-def load_token(token_file):
+def load_token(token_file, client_id):
     try:
         with open(token_file, "r") as file:
             data = json.load(file)
-        character_id, access_token, refresh_token = renew_token(data["refresh_token"])
+        character_id, access_token, refresh_token = renew_token(data["refresh_token"], client_id)
     except FileNotFoundError:
-        character_id, access_token, refresh_token = generate_token()
+        character_id, access_token, refresh_token = generate_token(client_id)
 
     data = {
         "refresh_token": refresh_token,
