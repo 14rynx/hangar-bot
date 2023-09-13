@@ -23,7 +23,12 @@ class Assets:
     @staticmethod
     async def _group_helper(asset, containers):
         asset_name = await get_item_name(asset["type_id"])
-        if asset["location_flag"] == "Cargo" or asset["location_flag"] == "DroneBay":
+        print(asset)
+        if asset["location_flag"] == "Cargo" or asset["location_flag"] == "DroneBay" or \
+                "HiSlot" in asset["location_flag"] or \
+                "MedSlot" in asset["location_flag"] or \
+                "LoSlot" in asset["location_flag"] or \
+                "RigSlot" in asset["location_flag"]:
             if asset["location_id"] not in containers:
                 containers[asset["location_id"]] = defaultdict(int)
             containers[asset["location_id"]][asset_name] += asset.get("quantity", 1)
