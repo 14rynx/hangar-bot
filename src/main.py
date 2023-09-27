@@ -5,6 +5,7 @@ import threading
 
 import discord
 import requests
+from waitress import serve
 
 from assets import Assets
 
@@ -181,8 +182,7 @@ async def on_message(message):
 
 
 if __name__ == "__main__":
-    flask_app.secret_key = os.environ["FLASK_SECRET"]
-    threading.Thread(target=lambda: flask_app.run(port=5000, use_reloader=False)).start()
+    threading.Thread(target=lambda: serve(flask_app)).start()
     # this print a URL where we can log in
 
     discord_client.run(os.environ["DISCORD_TOKEN"])

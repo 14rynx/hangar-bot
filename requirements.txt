@@ -3,3 +3,4 @@ Pyyaml
 EsiPy
 Flask
 discord
+waitress
