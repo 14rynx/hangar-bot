@@ -1,4 +1,4 @@
-import json
+import os
 import shelve
 import sys
 import threading
@@ -22,19 +22,15 @@ from esipy import EsiSecurity
 from flask import Flask
 from flask import request
 
-# Load environment variables
-with open('../secrets.json', "r") as f:
-    secrets = json.loads(f.read())
-
 # Setup Server
 flask_app = Flask(__name__)
 
 # Setup ESI
 esi_app = EsiApp().get_latest_swagger
 esi_security = EsiSecurity(
-    redirect_uri=secrets["REDIRECT_URI"],
-    client_id=secrets["CLIENT_ID"],
-    secret_key=secrets["SECRET_KEY"],
+    redirect_uri=os.environ["CCP_REDIRECT_URI"],
+    client_id=os.environ["CCP_CLIENT_ID"],
+    secret_key=os.environ["CCP_SECRET_KEY"],
     headers={'User-Agent': 'Hangar organizing discord bot by larynx.austrene@gmail.com'},
 )
 
@@ -185,8 +181,8 @@ async def on_message(message):
 
 
 if __name__ == "__main__":
-    flask_app.secret_key = secrets["FLASK_SECRET"]
+    flask_app.secret_key = os.environ["FLASK_SECRET"]
     threading.Thread(target=lambda: flask_app.run(port=5000, use_reloader=False)).start()
     # this print a URL where we can log in
 
-    discord_client.run(secrets["TOKEN"])
+    discord_client.run(os.environ["DISCORD_TOKEN"])
