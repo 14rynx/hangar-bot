@@ -1,5 +1,6 @@
 .idea/
-tokens/
-states/
-main.py
 __pychache__/
+data/tokens
+data/states/*
+data/reqs/*
+secrets.json
