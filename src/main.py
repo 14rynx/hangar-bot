@@ -23,7 +23,7 @@ from flask import Flask
 from flask import request
 
 # Load environment variables
-with open('secrets.json', "r") as f:
+with open('../secrets.json', "r") as f:
     secrets = json.loads(f.read())
 
 # Setup Server
@@ -71,7 +71,7 @@ def callback():
 
     # Store tokens under author
     # TODO: Cross site author change fixing
-    with shelve.open('data/tokens') as author_character_tokens:
+    with shelve.open('../data/tokens') as author_character_tokens:
         if author_id not in author_character_tokens:
             author_character_tokens[author_id] = {character_id: tokens}
         else:
@@ -81,7 +81,7 @@ def callback():
 
 
 def get_author_characters(author_id):
-    with shelve.open('data/tokens') as author_character_tokens:
+    with shelve.open('../data/tokens') as author_character_tokens:
         for character_id, tokens in author_character_tokens[str(author_id)].items():
             esi_security.update_token(tokens)
             tokens = esi_security.refresh()
@@ -93,7 +93,7 @@ def get_author_characters(author_id):
 
 # Discord Functionality
 def get_author_assets(author_id):
-    with shelve.open('data/tokens') as author_character_tokens:
+    with shelve.open('../data/tokens') as author_character_tokens:
         for character_id, tokens in author_character_tokens[str(author_id)].items():
             esi_security.update_token(tokens)
             tokens = esi_security.refresh()
@@ -140,7 +140,8 @@ async def on_message(message):
         try:
             state_errors = []
             for assets in get_author_assets(message.author.id):
-                state_errors.append(f"**{assets.character_name}:**\n" + assets.check_state(f"data/reqs/{message.author.id}.yaml"))
+                state_errors.append(
+                    f"**{assets.character_name}:**\n" + assets.check_state(f"data/reqs/{message.author.id}.yaml"))
             await message.channel.send(
                 f"**State Errors:**\n" +
                 "\n\n".join(state_errors)
@@ -166,9 +167,9 @@ async def on_message(message):
     if message.content.startswith("!set"):
         try:
             if message.attachments[0].url:
-                r = requests.get(message.attachments[0].url, allow_redirects=True)
+                response = requests.get(message.attachments[0].url, allow_redirects=True)
                 with open(f"data/reqs/{message.author.id}.yaml", 'wb') as file:
-                    file.write(r.content)
+                    file.write(response.content)
             await message.channel.send("Set new requirements file!")
         except (KeyError, IndexError):
             await message.channel.send("You forgot to attach a new requirement file!")
