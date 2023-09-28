@@ -1,8 +1,8 @@
 import os
+import secrets
 import shelve
 import sys
 import threading
-import secrets
 
 import discord
 import requests
@@ -136,12 +136,11 @@ async def on_message(message):
         try:
             state_errors = []
             for assets in get_author_assets(str(message.author.id)):
-                state_errors.append(
-                    f"**{assets.character_name}:**\n" + assets.check_state(f"data/reqs/{message.author.id}.yaml"))
-            await message.channel.send(
-                f"**State Errors:**\n" +
-                "\n\n".join(state_errors)
-            )
+                state_error_body = assets.check_state(f"data/reqs/{message.author.id}.yaml")
+                state_errors.append(f"**{assets.character_name}:**\n{state_error_body}")
+
+            state_errors_body = "\n\n".join(state_errors)
+            await message.channel.send(f"**State Errors:**\n{state_errors_body}")
 
         except KeyError:
             await message.channel.send("You have no authorized characters!")
@@ -151,11 +150,8 @@ async def on_message(message):
             buy_list = collections.defaultdict(int)
             for assets in get_author_assets(str(message.author.id)):
                 buy_list = assets.get_buy_list(f"data/reqs/{message.author.id}.yaml", buy_list=buy_list)
-            await message.channel.send(
-                f"**Buy List:**\n```" +
-                "\n".join([f"{item} {amount}" for item, amount in buy_list.items()]) +
-                "```"
-            )
+            buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
+            await message.channel.send(f"**Buy List:**\n```{buy_list_body}```")
 
         except KeyError:
             await message.channel.send("You have no authorized characters!")
@@ -172,22 +168,20 @@ async def on_message(message):
 
     if message.content.startswith("!characters"):
         author_id = str(message.author.id)
-        try:
-            character_names = []
-            with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-                for character_id, tokens in author_character_tokens[author_id].items():
-                    esi_security.update_token(tokens)
-                    tokens = esi_security.refresh()
-                    author_character_tokens[author_id][character_id] = tokens
+        character_names = []
+        with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
+            for character_id, tokens in author_character_tokens[author_id].items():
+                esi_security.update_token(tokens)
+                tokens = esi_security.refresh()
+                author_character_tokens[author_id][character_id] = tokens
 
-                    character_data = esi_security.verify()
-                    character_names.append(character_data["name"])
+                character_data = esi_security.verify()
+                character_names.append(character_data["name"])
 
-            await message.channel.send(
-                "You have the following character(s) authenticated:\n" +
-                "\n".join(character_names)
-            )
-        except (KeyError, IndexError):
+        if len(character_names) > 0:
+            character_names_body = "\n".join(character_names)
+            await message.channel.send(f"You have the following character(s) authenticated:\n{character_names_body}")
+        else:
             await message.channel.send("You have no authorized characters!")
 
     if message.content.startswith("!revoke"):

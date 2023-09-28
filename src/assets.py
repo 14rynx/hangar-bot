@@ -5,12 +5,12 @@ import yaml
 
 def good_location(location_flag):
     return location_flag == "Cargo" or \
-           location_flag == "DroneBay" or \
-           "HiSlot" in location_flag or \
-           "MedSlot" in location_flag or \
-           "LoSlot" in location_flag or \
-           "RigSlot" in location_flag or \
-           "SubSystemSlot" in location_flag
+        location_flag == "DroneBay" or \
+        "HiSlot" in location_flag or \
+        "MedSlot" in location_flag or \
+        "LoSlot" in location_flag or \
+        "RigSlot" in location_flag or \
+        "SubSystemSlot" in location_flag
 
 
 class Assets:
@@ -25,8 +25,8 @@ class Assets:
 
         if head_result.status == 200:
             npages = head_result.header['X-Pages'][0]
-            ops = [esi_app.op['get_characters_character_id_assets'](character_id=character_id, page=page) for page in
-                   range(1, npages + 1)]
+            ops = [esi_app.op['get_characters_character_id_assets'](character_id=character_id, page=page)
+                   for page in range(1, npages + 1)]
             results = esi_client.multi_request(ops)
             for request, result in results:
                 self.assets.extend(result.data)
@@ -99,15 +99,15 @@ class Assets:
             if container_name in container_requirements:
                 for required_item_name, required_item_amount in container_requirements[container_name].items():
                     if not required_item_name in container_contents:
-                        container_output.append(f"- {required_item_name} is completely missing ({required_item_amount} units)")
+                        container_output.append(
+                            f"- {required_item_name} is completely missing ({required_item_amount} units)")
                     elif container_contents[required_item_name] < required_item_amount:
-                        container_output.append(f"- {required_item_name} is missing {required_item_amount - container_contents[required_item_name]} units")
+                        container_output.append(
+                            f"- {required_item_name} is missing {required_item_amount - container_contents[required_item_name]} units")
 
             if container_output:
-                output.append(
-                    f"{container_name.strip(':')}:\n" +
-                    "\n".join(container_output)
-                )
+                container_body = "\n".join(container_output)
+                output.append(f"{container_name.strip(':')}:\n{container_body}")
 
         return "\n".join(output)
 
