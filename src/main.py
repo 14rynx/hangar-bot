@@ -120,41 +120,56 @@ async def on_message(message):
         )
 
     if message.content.startswith("!state"):
-        try:
-            files_to_send = []
-            for assets in get_author_assets(str(message.author.id)):
-                assets.save_state(f"data/states/{assets.character_name}.yaml")
-                with open(f"data/states/{assets.character_name}.yaml", "rb") as file:
-                    files_to_send.append(discord.File(file, filename=f"{assets.character_name}.yaml"))
+        files_to_send = []
+        for assets in get_author_assets(str(message.author.id)):
+            assets.save_state(f"data/states/{assets.character_name}.yaml")
+            with open(f"data/states/{assets.character_name}.yaml", "rb") as file:
+                files_to_send.append(discord.File(file, filename=f"{assets.character_name}.yaml"))
 
+        if files_to_send:
             await message.channel.send("Here are your current Ships", files=files_to_send)
-
-        except KeyError:
+        else:
             await message.channel.send("You have no authorized characters!")
 
     if message.content.startswith("!check"):
         try:
             state_errors = []
+            has_characters = False
             for assets in get_author_assets(str(message.author.id)):
                 state_error_body = assets.check_state(f"data/reqs/{message.author.id}.yaml")
-                state_errors.append(f"**{assets.character_name}:**\n{state_error_body}")
+                if state_error_body:
+                    state_errors.append(f"**{assets.character_name}:**\n{state_error_body}")
+                has_characters = True
 
             state_errors_body = "\n\n".join(state_errors)
-            await message.channel.send(f"**State Errors:**\n{state_errors_body}")
-
-        except KeyError:
-            await message.channel.send("You have no authorized characters!")
+            if state_errors_body:
+                await message.channel.send(f"**State Errors:**\n{state_errors_body}")
+            else:
+                if has_characters:
+                    await message.channel.send("**No State Errors found!**")
+                else:
+                    await message.channel.send("You have no authorized characters!")
+        except FileNotFoundError:
+            await message.channel.send("You have not set a requirements file, use the !set command and upload one!")
 
     if message.content.startswith("!buy"):
         try:
             buy_list = collections.defaultdict(int)
+            has_characters = False
             for assets in get_author_assets(str(message.author.id)):
                 buy_list = assets.get_buy_list(f"data/reqs/{message.author.id}.yaml", buy_list=buy_list)
-            buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
-            await message.channel.send(f"**Buy List:**\n```{buy_list_body}```")
+                has_characters = True
 
-        except KeyError:
-            await message.channel.send("You have no authorized characters!")
+            buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
+            if buy_list_body:
+                await message.channel.send(f"**Buy List:**\n```{buy_list_body}```")
+            else:
+                if has_characters:
+                    await message.channel.send("**Nothing to buy!**")
+                else:
+                    await message.channel.send("You have no authorized characters!")
+        except FileNotFoundError:
+            await message.channel.send("You have not set a requirements file, use the !set command and upload one!")
 
     if message.content.startswith("!set"):
         try:
@@ -178,7 +193,7 @@ async def on_message(message):
                 character_data = esi_security.verify()
                 character_names.append(character_data["name"])
 
-        if len(character_names) > 0:
+        if character_names:
             character_names_body = "\n".join(character_names)
             await message.channel.send(f"You have the following character(s) authenticated:\n{character_names_body}")
         else:
@@ -186,19 +201,15 @@ async def on_message(message):
 
     if message.content.startswith("!revoke"):
         author_id = str(message.author.id)
-        try:
-            with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-                for character_id, tokens in author_character_tokens[author_id].items():
-                    esi_security.update_token(tokens)
-                    esi_security.refresh()
-                    esi_security.revoke()
+        with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
+            for character_id, tokens in author_character_tokens[author_id].items():
+                esi_security.update_token(tokens)
+                esi_security.refresh()
+                esi_security.revoke()
 
-                author_character_tokens[author_id] = {}
+            author_character_tokens[author_id] = {}
 
-            await message.channel.send("Revoked all characters(') API access!\n")
-        except (KeyError, IndexError):
-            await message.channel.send("You have no authorized characters!")
-
+        await message.channel.send("Revoked all characters(') API access!\n")
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: serve(flask_app, port=80)).start()
