@@ -47,13 +47,13 @@ class Assets:
             name = item_data["name"]
             name = name.replace("&gt;", ">")
             name = name.replace("&lt;", "<")
-            container_names.update({item_data["item_id"]: name})
+            container_names[item_data["item_id"]] = name
 
         # Get the type_id for each container
         container_type_ids = {}
         for asset in self.assets:
             if asset["item_id"] in containers.keys():
-                container_type_ids.update({asset["item_id"]: asset["type_id"]})
+                container_type_ids[asset["item_id"]] = asset["type_id"]
 
         # Get the type_name of each item and container
         ops = [esi_app.op['get_universe_types_type_id'](type_id=asset["type_id"]) for asset in self.assets]
@@ -80,11 +80,11 @@ class Assets:
             # Sort contents
             sorted_contents = {}
             for item_name, amount in sorted(contents.items(), key=lambda x: x[0]):
-                sorted_contents.update({item_name: amount})
+                sorted_contents[item_name] = amount
 
             # If there are multiple containers with the same name take the fullest one
             if container_name not in state or sum(contents.values()) > sum(state[container_name].values()):
-                state.update({container_name: sorted_contents})
+                state[container_name] = sorted_contents
 
         return state
 

@@ -2,6 +2,7 @@ import os
 import shelve
 import sys
 import threading
+import secrets
 
 import discord
 import requests
@@ -47,8 +48,11 @@ discord_intent.messages = True
 discord_intent.message_content = True
 discord_client = discord.Client(intents=discord_intent)
 
+# Setup temporary storage
+state_author = {}
 
-## Server Functionality
+
+# Server Functionality
 @flask_app.route("/")
 def hello_world():
     return "<p>Hangar Script Callback Server</p>"
@@ -58,7 +62,12 @@ def hello_world():
 def callback():
     # get the code from the login process
     code = request.args.get('code')
-    author_id = request.args.get('state')
+    state = request.args.get('state')
+
+    try:
+        author_id = state_author[state]
+    except KeyError:
+        return 'Authentication failed: State Missmatch', 403
 
     tokens = esi_security.auth(code)
 
@@ -67,8 +76,7 @@ def callback():
     character_name = character_data["name"]
 
     # Store tokens under author
-    # TODO: Cross site author change fixing
-    with shelve.open('../data/tokens') as author_character_tokens:
+    with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
         if author_id not in author_character_tokens:
             author_character_tokens[author_id] = {character_id: tokens}
         else:
@@ -77,24 +85,13 @@ def callback():
     return f"<p>Sucessfully authentiated {character_name}!</p>"
 
 
-def get_author_characters(author_id):
-    with shelve.open('../data/tokens') as author_character_tokens:
-        for character_id, tokens in author_character_tokens[str(author_id)].items():
-            esi_security.update_token(tokens)
-            tokens = esi_security.refresh()
-            author_character_tokens[str(author_id)][character_id] = tokens
-
-            character_data = esi_security.verify()
-            yield character_data["name"]
-
-
 # Discord Functionality
 def get_author_assets(author_id):
-    with shelve.open('../data/tokens') as author_character_tokens:
-        for character_id, tokens in author_character_tokens[str(author_id)].items():
+    with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
+        for character_id, tokens in author_character_tokens[author_id].items():
             esi_security.update_token(tokens)
             tokens = esi_security.refresh()
-            author_character_tokens[str(author_id)][character_id] = tokens
+            author_character_tokens[author_id][character_id] = tokens
 
             character_data = esi_security.verify()
             character_id = character_data["sub"].split(':')[-1]
@@ -115,9 +112,11 @@ async def on_message(message):
         return
 
     if message.content.startswith("!auth"):
-        await message.channel.send(
-            "Use the following link to authenticate characters: \n" +
-            esi_security.get_auth_uri(state=message.author.id, scopes=['esi-assets.read_assets.v1'])
+        state = secrets.token_urlsafe(30)
+        state_author[state] = message.author.id
+        uri = esi_security.get_auth_uri(state=state, scopes=['esi-assets.read_assets.v1'])
+        await message.author.send(
+            f"Use this [authentication link]({uri}) to authorize your characters."
         )
 
     if message.content.startswith("!state"):
@@ -173,10 +172,34 @@ async def on_message(message):
 
     if message.content.startswith("!characters"):
         try:
+            character_names = []
+            with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
+                for character_id, tokens in author_character_tokens[message.author.id].items():
+                    esi_security.update_token(tokens)
+                    tokens = esi_security.refresh()
+                    author_character_tokens[message.author.id][character_id] = tokens
+
+                    character_data = esi_security.verify()
+                    character_names.append(character_data["name"])
+
             await message.channel.send(
                 "You have the following character(s) authenticated:\n" +
-                "\n".join(get_author_characters(message.author.id))
+                "\n".join(character_names)
             )
+        except (KeyError, IndexError):
+            await message.channel.send("You have no authorized characters!")
+
+    if message.content.startswith("!revoke"):
+        try:
+            with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
+                for character_id, tokens in author_character_tokens[message.author.id].items():
+                    esi_security.update_token(tokens)
+                    esi_security.refresh()
+                    esi_security.revoke()
+
+                author_character_tokens[message.author.id] = {}
+
+            await message.channel.send("Revoked all characters(') API access!\n")
         except (KeyError, IndexError):
             await message.channel.send("You have no authorized characters!")
 
