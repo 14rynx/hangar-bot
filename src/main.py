@@ -182,7 +182,5 @@ async def on_message(message):
 
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: serve(flask_app)).start()
-    # this print a URL where we can log in
-
+    threading.Thread(target=lambda: serve(flask_app, port=80)).start()
     discord_client.run(os.environ["DISCORD_TOKEN"])
