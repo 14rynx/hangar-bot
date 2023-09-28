@@ -65,7 +65,7 @@ def callback():
     state = request.args.get('state')
 
     try:
-        author_id = state_author[state]
+        author_id = str(state_author[state])
     except KeyError:
         return 'Authentication failed: State Missmatch', 403
 
@@ -86,7 +86,7 @@ def callback():
 
 
 # Discord Functionality
-def get_author_assets(author_id):
+def get_author_assets(author_id: str):
     with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
         for character_id, tokens in author_character_tokens[author_id].items():
             esi_security.update_token(tokens)
@@ -122,7 +122,7 @@ async def on_message(message):
     if message.content.startswith("!state"):
         try:
             files_to_send = []
-            for assets in get_author_assets(message.author.id):
+            for assets in get_author_assets(str(message.author.id)):
                 assets.save_state(f"data/states/{assets.character_name}.yaml")
                 with open(f"data/states/{assets.character_name}.yaml", "rb") as file:
                     files_to_send.append(discord.File(file, filename=f"{assets.character_name}.yaml"))
@@ -135,7 +135,7 @@ async def on_message(message):
     if message.content.startswith("!check"):
         try:
             state_errors = []
-            for assets in get_author_assets(message.author.id):
+            for assets in get_author_assets(str(message.author.id)):
                 state_errors.append(
                     f"**{assets.character_name}:**\n" + assets.check_state(f"data/reqs/{message.author.id}.yaml"))
             await message.channel.send(
@@ -149,7 +149,7 @@ async def on_message(message):
     if message.content.startswith("!buy"):
         try:
             buy_list = collections.defaultdict(int)
-            for assets in get_author_assets(message.author.id):
+            for assets in get_author_assets(str(message.author.id)):
                 buy_list = assets.get_buy_list(f"data/reqs/{message.author.id}.yaml", buy_list=buy_list)
             await message.channel.send(
                 f"**Buy List:**\n```" +
@@ -171,13 +171,14 @@ async def on_message(message):
             await message.channel.send("You forgot to attach a new requirement file!")
 
     if message.content.startswith("!characters"):
+        author_id = str(message.author.id)
         try:
             character_names = []
             with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-                for character_id, tokens in author_character_tokens[message.author.id].items():
+                for character_id, tokens in author_character_tokens[author_id].items():
                     esi_security.update_token(tokens)
                     tokens = esi_security.refresh()
-                    author_character_tokens[message.author.id][character_id] = tokens
+                    author_character_tokens[author_id][character_id] = tokens
 
                     character_data = esi_security.verify()
                     character_names.append(character_data["name"])
@@ -190,14 +191,15 @@ async def on_message(message):
             await message.channel.send("You have no authorized characters!")
 
     if message.content.startswith("!revoke"):
+        author_id = str(message.author.id)
         try:
             with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-                for character_id, tokens in author_character_tokens[message.author.id].items():
+                for character_id, tokens in author_character_tokens[author_id].items():
                     esi_security.update_token(tokens)
                     esi_security.refresh()
                     esi_security.revoke()
 
-                author_character_tokens[message.author.id] = {}
+                author_character_tokens[author_id] = {}
 
             await message.channel.send("Revoked all characters(') API access!\n")
         except (KeyError, IndexError):
