@@ -3,6 +3,7 @@ import secrets
 import shelve
 import sys
 import threading
+from io import BytesIO
 
 import discord
 import requests
@@ -101,6 +102,13 @@ def get_author_assets(author_id: str):
             yield assets
 
 
+async def send_maybe_file(send_object, text):
+    if len(text) < 2000:
+        await send_object.send(text)
+    else:
+        await send_object.send("Message to big, sending file instead.", file=discord.File(BytesIO(text), "message.md"))
+
+
 @discord_client.event
 async def on_ready():
     print(f'We have logged in as {discord_client.user}')
@@ -143,7 +151,7 @@ async def on_message(message):
 
             state_errors_body = "\n\n".join(state_errors)
             if state_errors_body:
-                await message.channel.send(f"**State Errors:**\n{state_errors_body}")
+                await send_maybe_file(message.channel, f"**State Errors:**\n{state_errors_body}")
             else:
                 if has_characters:
                     await message.channel.send("**No State Errors found!**")
@@ -162,7 +170,7 @@ async def on_message(message):
 
             buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
             if buy_list_body:
-                await message.channel.send(f"**Buy List:**\n```{buy_list_body}```")
+                await send_maybe_file(message.channel, f"**Buy List:**\n```{buy_list_body}```")
             else:
                 if has_characters:
                     await message.channel.send("**Nothing to buy!**")
@@ -210,6 +218,7 @@ async def on_message(message):
             author_character_tokens[author_id] = {}
 
         await message.channel.send("Revoked all characters(') API access!\n")
+
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: serve(flask_app, port=80)).start()
