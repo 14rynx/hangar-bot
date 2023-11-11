@@ -60,11 +60,25 @@ def get_author_assets(author_id: str):
             yield assets
 
 
-async def send_large_message(send_object, text):
-    if len(text) < 2000:
-        await send_object.send(text)
-    else:
-        await send_object.send("Message to big, sending file instead.", file=discord.File(BytesIO(text), "message.md"))
+async def send_large_message(ctx, message, max_chars=2000):
+    while len(message) > 0:
+        # Check if the message content is shorter than the max_chars
+        if len(message) <= max_chars:
+            await ctx.send(message)
+            break
+
+        # Find the last newline character before max_chars
+        last_newline_index = message.rfind('\n', 0, max_chars)
+
+        # If there is no newline before max_chars, split at max_chars
+        if last_newline_index == -1:
+            await ctx.send(message[:max_chars])
+            message = message[max_chars:]
+
+        # Split at the last newline before max_chars
+        else:
+            await ctx.send(message[:last_newline_index])
+            message = message[last_newline_index + 1:]
 
 
 @bot.command()
@@ -210,6 +224,6 @@ async def revoke(ctx):
 
 
 if __name__ == "__main__":
-    callback_server = threading.Thread(target=lambda: callback_server(esi_security))
-    callback_server.start()
+    callback = threading.Thread(target=lambda: callback_server(esi_security))
+    callback.start()
     bot.run(os.environ["DISCORD_TOKEN"])
