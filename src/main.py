@@ -126,7 +126,7 @@ async def check(ctx):
 
 
 @bot.command()
-async def check(ctx):
+async def buy(ctx):
     try:
         buy_list = collections.defaultdict(int)
         has_characters = False
@@ -151,7 +151,7 @@ async def check(ctx):
 
 
 @bot.command()
-async def check(ctx):
+async def set(ctx):
     try:
         if ctx.attachments[0].url:
             response = requests.get(ctx.attachments[0].url, allow_redirects=True)
