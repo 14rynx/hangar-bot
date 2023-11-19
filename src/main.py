@@ -171,7 +171,7 @@ async def get(ctx):
     """Returns your current requirements."""
     with open(f"data/reqs/{ctx.author.id}.yaml", "rb") as file:
         requirements = discord.File(file, filename=f"requirements.yaml")
-    await ctx.send("Here is your current requirement file.", files=requirements)
+    await ctx.send("Here is your current requirement file.", file=requirements)
 
 
 @bot.command()
