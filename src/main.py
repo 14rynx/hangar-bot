@@ -81,19 +81,8 @@ async def send_large_message(ctx, message, max_chars=2000):
 
 
 @bot.command()
-async def auth(ctx):
-    try:
-        secret_state = secrets.token_urlsafe(30)
-        with shelve.open('../data/challenges', writeback=True) as challenges:
-            challenges[secret_state] = ctx.author.id
-        uri = esi_security.get_auth_uri(state=secret_state, scopes=['esi-assets.read_assets.v1'])
-        await ctx.author.send(f"Use this [authentication link]({uri}) to authorize your characters.")
-    except _gdbm.error:
-        await ctx.send("Currently busy with another command!")
-
-
-@bot.command()
 async def state(ctx):
+    """Returns the current state of all your ships in yaml format. (Useful for first setting things up)"""
     try:
         files_to_send = []
         for assets in get_author_assets(str(ctx.author.id)):
@@ -102,7 +91,7 @@ async def state(ctx):
                 files_to_send.append(discord.File(file, filename=f"{assets.character_name}.yaml"))
 
         if files_to_send:
-            await ctx.send("Here are your current Ships", files=files_to_send)
+            await ctx.send("Here are your current ship states.", files=files_to_send)
         else:
             await ctx.send("You have no authorized characters!")
     except APIException:
@@ -113,6 +102,7 @@ async def state(ctx):
 
 @bot.command()
 async def check(ctx):
+    """Returns a bullet point list of what ships are missing things."""
     try:
         state_errors = []
         has_characters = False
@@ -140,6 +130,7 @@ async def check(ctx):
 
 @bot.command()
 async def buy(ctx):
+    """Returns a multibuy of all the things missing in your ships."""
     try:
         buy_list = collections.defaultdict(int)
         has_characters = False
@@ -165,20 +156,40 @@ async def buy(ctx):
 
 @bot.command()
 async def set(ctx, attachment: discord.Attachment):
-    try:
-        if attachment:
-            response = requests.get(ctx.attachments[0].url, allow_redirects=True)
-            with open(f"data/reqs/{ctx.author.id}.yaml", 'wb') as file:
-                file.write(response.content)
+    """Sets your current requirement file to the one attached to this command."""
+    if attachment:
+        response = requests.get(attachment.url, allow_redirects=True)
+        with open(f"data/reqs/{ctx.author.id}.yaml", 'wb') as file:
+            file.write(response.content)
         await ctx.send("Set new requirements file!")
-    except (KeyError, IndexError):
+    else:
         await ctx.send("You forgot to attach a new requirement file!")
+
+
+@bot.command()
+async def get(ctx):
+    """Returns your current requirements."""
+    with open(f"data/reqs/{ctx.author.id}.yaml", "rb") as file:
+        requirements = discord.File(file, filename=f"requirements.yaml")
+    await ctx.send("Here is your current requirement file.", files=requirements)
+
+
+@bot.command()
+async def auth(ctx):
+    """Sends you an authorization link for a character."""
+    try:
+        secret_state = secrets.token_urlsafe(30)
+        with shelve.open('../data/challenges', writeback=True) as challenges:
+            challenges[secret_state] = ctx.author.id
+        uri = esi_security.get_auth_uri(state=secret_state, scopes=['esi-assets.read_assets.v1'])
+        await ctx.author.send(f"Use this [authentication link]({uri}) to authorize your characters.")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
 
 
 @bot.command()
 async def characters(ctx):
+    """Displays your currently authorized characters."""
     try:
         author_id = str(ctx.author.id)
         character_names = []
@@ -204,6 +215,7 @@ async def characters(ctx):
 
 @bot.command()
 async def revoke(ctx):
+    """Revokes ESI access from all your characters."""
     try:
         author_id = str(ctx.author.id)
         with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
