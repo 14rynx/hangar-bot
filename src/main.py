@@ -4,7 +4,6 @@ import secrets
 import shelve
 import sys
 import threading
-from io import BytesIO
 
 import discord
 import requests
@@ -165,9 +164,9 @@ async def buy(ctx):
 
 
 @bot.command()
-async def set(ctx):
+async def set(ctx, attachment: discord.Attachment):
     try:
-        if ctx.attachments[0].url:
+        if attachment:
             response = requests.get(ctx.attachments[0].url, allow_redirects=True)
             with open(f"data/reqs/{ctx.author.id}.yaml", 'wb') as file:
                 file.write(response.content)
