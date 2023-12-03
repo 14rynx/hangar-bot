@@ -15,6 +15,7 @@ services:
       - "traefik.http.routers.hangar-secure.entrypoints=websecure"
       - "traefik.http.routers.hangar-secure.tls=true"
       - "traefik.http.routers.hangar-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.hangar-secure.loadbalancer.server.port=80"
     networks:
       - web
 volumes:
