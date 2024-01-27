@@ -1,4 +1,5 @@
 import _gdbm
+import logging
 import os
 import secrets
 import shelve
@@ -25,6 +26,11 @@ from esipy import EsiClient
 from esipy import EsiSecurity
 from esipy.exceptions import APIException
 
+# Configure the logger
+logger = logging.getLogger('discord.refresh')
+logger.setLevel(logging.INFO)
+
+# Setup ESIPy
 esi_app = EsiApp().get_latest_swagger
 esi_security = EsiSecurity(
     redirect_uri=os.environ["CCP_REDIRECT_URI"],
@@ -39,6 +45,7 @@ esi_client = EsiClient(
     security=esi_security
 )
 
+# Setup Discord
 intent = discord.Intents.default()
 intent.messages = True
 intent.message_content = True
@@ -89,6 +96,9 @@ async def on_ready():
 @bot.command()
 async def state(ctx):
     """Returns the current state of all your ships in yaml format. (Useful for first setting things up)"""
+
+    logger.info(f"{ctx.author.name} used !state")
+
     try:
         files_to_send = []
         for assets in get_author_assets(str(ctx.author.id)):
@@ -109,6 +119,9 @@ async def state(ctx):
 @bot.command()
 async def check(ctx):
     """Returns a bullet point list of what ships are missing things."""
+
+    logger.info(f"{ctx.author.name} used !check")
+
     try:
         state_errors = []
         has_characters = False
@@ -137,6 +150,9 @@ async def check(ctx):
 @bot.command()
 async def buy(ctx):
     """Returns a multibuy of all the things missing in your ships."""
+
+    logger.info(f"{ctx.author.name} used !buy")
+
     try:
         buy_list = collections.defaultdict(int)
         has_characters = False
@@ -163,6 +179,9 @@ async def buy(ctx):
 @bot.command()
 async def set(ctx, attachment: discord.Attachment):
     """Sets your current requirement file to the one attached to this command."""
+
+    logger.info(f"{ctx.author.name} used !set")
+
     if attachment:
         response = requests.get(attachment.url, allow_redirects=True)
         with open(f"data/reqs/{ctx.author.id}.yaml", 'wb') as file:
@@ -175,6 +194,9 @@ async def set(ctx, attachment: discord.Attachment):
 @bot.command()
 async def get(ctx):
     """Returns your current requirements."""
+
+    logger.info(f"{ctx.author.name} used !get")
+
     with open(f"data/reqs/{ctx.author.id}.yaml", "rb") as file:
         requirements = discord.File(file, filename=f"requirements.yaml")
     await ctx.send("Here is your current requirement file.", file=requirements)
@@ -183,6 +205,9 @@ async def get(ctx):
 @bot.command()
 async def auth(ctx):
     """Sends you an authorization link for a character."""
+
+    logger.info(f"{ctx.author.name} used !auth")
+
     try:
         secret_state = secrets.token_urlsafe(30)
         with shelve.open('../data/challenges', writeback=True) as challenges:
@@ -196,6 +221,9 @@ async def auth(ctx):
 @bot.command()
 async def characters(ctx):
     """Displays your currently authorized characters."""
+
+    logger.info(f"{ctx.author.name} used !characters")
+
     try:
         author_id = str(ctx.author.id)
         character_names = []
@@ -222,6 +250,9 @@ async def characters(ctx):
 @bot.command()
 async def revoke(ctx):
     """Revokes ESI access from all your characters."""
+
+    logger.info(f"{ctx.author.name} used !revoke")
+
     try:
         author_id = str(ctx.author.id)
         with shelve.open('../data/tokens', writeback=True) as author_character_tokens:

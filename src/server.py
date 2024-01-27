@@ -1,8 +1,13 @@
+import logging
 import shelve
 
 from flask import Flask
 from flask import request
 from waitress import serve
+
+# Configure the logger
+logger = logging.getLogger('callback')
+logger.setLevel(logging.INFO)
 
 
 def callback_server(esi_security):
