@@ -1,5 +1,13 @@
 import logging
 import shelve
+import sys
+
+# Fix for Mutable Mapping collection being moved
+if sys.version_info.major == 3 and sys.version_info.minor >= 10:
+    import collections
+
+    setattr(collections, "MutableMapping", collections.abc.MutableMapping)
+    setattr(collections, "Mapping", collections.abc.Mapping)
 
 from discord.ext import tasks
 from esipy.exceptions import APIException
