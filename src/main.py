@@ -10,6 +10,7 @@ import requests
 from discord.ext import commands
 
 from assets import Assets
+from refresh_tokens import refresh_tokens
 from server import callback_server
 
 # Fix for Mutable Mapping collection being moved
@@ -78,6 +79,11 @@ async def send_large_message(ctx, message, max_chars=2000):
         else:
             await ctx.send(message[:last_newline_index])
             message = message[last_newline_index + 1:]
+
+
+@bot.event
+async def on_ready():
+    refresh_tokens.start(esi_security)
 
 
 @bot.command()
