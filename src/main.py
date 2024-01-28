@@ -4,15 +4,14 @@ import os
 import secrets
 import shelve
 import sys
-import threading
 
 import discord
 import requests
 from discord.ext import commands
 
 from assets import Assets
+from callback_server import callback_server
 from refresh_tokens import refresh_tokens
-from server import callback_server
 
 # Fix for Mutable Mapping collection being moved
 if sys.version_info.major == 3 and sys.version_info.minor >= 10:
@@ -91,6 +90,7 @@ async def send_large_message(ctx, message, max_chars=2000):
 @bot.event
 async def on_ready():
     refresh_tokens.start(esi_security)
+    callback_server.start(esi_security)
 
 
 @bot.command()
@@ -272,6 +272,4 @@ async def revoke(ctx):
 
 
 if __name__ == "__main__":
-    callback = threading.Thread(target=lambda: callback_server(esi_security))
-    callback.start()
     bot.run(os.environ["DISCORD_TOKEN"])
