@@ -1,3 +1,4 @@
+import logging
 import shelve
 import sys
 
@@ -12,6 +13,10 @@ if sys.version_info.major == 3 and sys.version_info.minor >= 10:
     setattr(collections, "Mapping", collections.abc.Mapping)
 
 from esipy.exceptions import APIException
+
+# Configure the logger
+logger = logging.getLogger('callback')
+logger.setLevel(logging.INFO)
 
 
 @tasks.loop()
@@ -32,6 +37,7 @@ async def callback_server(esi_security):
             with shelve.open('../data/challenges', writeback=True) as challenges:
                 author_id = str(challenges[state])
         except KeyError:
+            logger.warning(f"failed to verify challenge")
             return web.Response(text="Authentication failed: State Missmatch", status=403)
 
         try:
@@ -41,6 +47,7 @@ async def callback_server(esi_security):
             character_id = character_data["sub"].split(':')[-1]
             character_name = character_data["name"]
         except APIException:
+            logger.warning(f"failed to verify token")
             return web.Response(text="Authentication failed: Token Invalid", status=403)
 
         # Store tokens under author
@@ -50,6 +57,7 @@ async def callback_server(esi_security):
             else:
                 author_character_tokens[author_id][character_id] = tokens
 
+        logger.info(f"added {character_id}")
         return web.Response(text=f"Sucessfully authentiated {character_name}!")
 
     app = web.Application()
