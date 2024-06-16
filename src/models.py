@@ -19,6 +19,14 @@ class Character(BaseModel):
     token = TextField()
 
 
+class CorporationCharacter(BaseModel):
+    """Character with access to a corporation"""
+    character_id = CharField(primary_key=True)
+    corporation_id = CharField()
+    user = ForeignKeyField(User, backref='corporation_characters')
+    token = TextField()
+
+
 class Challenge(BaseModel):
     user = ForeignKeyField(User, backref='challenges')
     state = CharField()
@@ -26,4 +34,4 @@ class Challenge(BaseModel):
 
 def initialize_database():
     with db:
-        db.create_tables([User, Character, Challenge])
+        db.create_tables([User, Character, CorporationCharacter, Challenge])

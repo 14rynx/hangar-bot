@@ -28,6 +28,14 @@ base_preston = Preston(
     scope="esi-assets.read_assets.v1",
 )
 
+corp_base_preston = Preston(
+    user_agent="Hangar organizing discord bot by larynx.austrene@gmail.com",
+    client_id=os.environ["CCP_CLIENT_ID"],
+    client_secret=os.environ["CCP_SECRET_KEY"],
+    callback_url=os.environ["CCP_REDIRECT_URI"],
+    scope="esi-assets.read_corporation_assets.v1",
+)
+
 # Setup Discord
 intent = discord.Intents.default()
 intent.messages = True
@@ -42,16 +50,17 @@ def with_refresh(preston_instance, refresh_token: str):
     return Preston(**new_kwargs)
 
 
-def get_author_ps(author_id: int):
+async def get_author_assets(author_id: int):
     user = User.get_or_none(User.user_id == str(author_id))
     if user:
         for character in user.characters:
-            yield with_refresh(base_preston, character.token)
-
-
-def get_author_assets(author_id: int):
-    for p in get_author_ps(author_id=author_id):
-        yield Assets(p)
+            a = Assets(with_refresh(base_preston, character.token))
+            await a.fetch()
+            yield a
+        for corporation_character in user.corporation_characters:
+            a =  Assets(with_refresh(corp_base_preston, corporation_character.token))
+            await a.fetch()
+            yield a
 
 
 async def send_large_message(ctx, message, max_chars=2000):
@@ -82,10 +91,15 @@ async def state(ctx):
 
     await ctx.send("Fetching assets...")
     files_to_send = []
-    for assets in get_author_assets(ctx.author.id):
-        assets.save_requirement(f"data/states/{assets.character_name}.yaml")
-        with open(f"data/states/{assets.character_name}.yaml", "rb") as file:
-            files_to_send.append(discord.File(file, filename=f"{assets.character_name}.yaml"))
+    async for assets in get_author_assets(ctx.author.id):
+        if assets.is_corporation:
+            filename = f"{assets.corporation_name}.yaml"
+        else:
+            filename = f"{assets.character_name}.yaml"
+
+        assets.save_requirement("data/states/" + filename)
+        with open("data/states/" + filename, "rb") as file:
+            files_to_send.append(discord.File(file, filename=filename))
 
     if files_to_send:
         await ctx.send("Here are your current ship states.", files=files_to_send)
@@ -103,9 +117,13 @@ async def check(ctx):
         has_characters = False
         has_errors = False
         message = ""
-        for assets in get_author_assets(ctx.author.id):
+        async for assets in get_author_assets(ctx.author.id):
             has_characters = True
-            name = f"**{assets.character_name}:**\n"
+            if assets.is_corporation:
+                name = f"**{assets.corporation_name}:**\n"
+            else:
+                name = f"**{assets.character_name}:**\n"
+
             for ship_error_message in assets.check_requirement(f"data/reqs/{ctx.author.id}.yaml"):
                 has_errors = True
 
@@ -140,7 +158,7 @@ async def buy(ctx):
         await ctx.send("Fetching assets...")
         buy_list = collections.Counter()
         has_characters = False
-        for assets in get_author_assets(ctx.author.id):
+        async for assets in get_author_assets(ctx.author.id):
             buy_list = assets.get_buy_list(f"data/reqs/{ctx.author.id}.yaml", buy_list=buy_list)
             has_characters = True
 
@@ -181,8 +199,9 @@ async def get(ctx):
 
 
 @bot.command()
-async def auth(ctx):
-    """Sends you an authorization link for a character."""
+async def auth(ctx, corporation=False):
+    """Sends you an authorization link for a character.
+    :corporation: Set true if you want to authorize for your corporation"""
     logger.info(f"{ctx.author.name} used !auth")
 
     secret_state = secrets.token_urlsafe(60)
@@ -191,8 +210,14 @@ async def auth(ctx):
     Challenge.delete().where(Challenge.user == user).execute()
     Challenge.create(user=user, state=secret_state)
 
-    full_link = f"{base_preston.get_authorize_url()}&state={secret_state}"
-    await ctx.author.send(f"Use this [authentication link]({full_link}) to authorize your characters.")
+    if corporation:
+        full_link = f"{corp_base_preston.get_authorize_url()}&state={secret_state}"
+        await ctx.author.send(
+            f"Use this [authentication link]({full_link}) to authorize a character in your corporation "
+            f"with the required role (Accountant).")
+    else:
+        full_link = f"{base_preston.get_authorize_url()}&state={secret_state}"
+        await ctx.author.send(f"Use this [authentication link]({full_link}) to authorize your characters.")
 
 
 @bot.command()
@@ -201,8 +226,19 @@ async def characters(ctx):
     logger.info(f"{ctx.author.name} used !characters")
 
     character_names = []
-    for p in get_author_ps(ctx.author.id):
-        character_names.append(p.whoami()["CharacterName"])
+    user = User.get_or_none(User.user_id == str(ctx.author.id))
+    if user:
+        for character in user.characters:
+            char_auth = with_refresh(base_preston, character.token)
+            character_name = char_auth.whoami()['CharacterName']
+            character_names.append(f"- {character_name}")
+
+        for corporation_character in user.corporation_characters:
+            char_auth = with_refresh(corp_base_preston, corporation_character.token)
+            character_name = char_auth.whoami()['CharacterName']
+            corporation_name = char_auth.get_op("get_corporations_corporation_id",
+                                                corporation_id=corporation_character.corporation_id).get("name")
+            character_names.append(f"- {corporation_name} (via {character_name})")
 
     if character_names:
         character_names_body = "\n".join(character_names)
