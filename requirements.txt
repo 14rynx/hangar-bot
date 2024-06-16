@@ -2,3 +2,4 @@ requests
 Pyyaml
 preston
 discord
+peewee
