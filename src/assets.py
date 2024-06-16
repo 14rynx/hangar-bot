@@ -91,7 +91,7 @@ class Assets:
                 if "Requested page does not exist!" in result["error"]:
                     break
                 elif result["error"] == "Character does not have required role(s)":
-                    raise Exception(result["error"])
+                    raise AssertionError(result["error"])
             else:
                 self.items.extend([Item(**x) for x in result])
                 page += 1

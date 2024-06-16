@@ -13,7 +13,7 @@ from callback_server import callback_server
 from models import initialize_database, User, Challenge
 
 # Configure the logger
-logger = logging.getLogger('discord.refresh')
+logger = logging.getLogger('discord.main')
 logger.setLevel(logging.INFO)
 
 # Initialize the database
@@ -58,9 +58,13 @@ async def get_author_assets(author_id: int):
             await a.fetch()
             yield a
         for corporation_character in user.corporation_characters:
-            a =  Assets(with_refresh(corp_base_preston, corporation_character.token))
-            await a.fetch()
-            yield a
+            try:
+                a = Assets(with_refresh(corp_base_preston, corporation_character.token))
+                await a.fetch()
+            except AssertionError:
+                corporation_character.delete_instance()
+            else:
+                yield a
 
 
 async def send_large_message(ctx, message, max_chars=2000):
