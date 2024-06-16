@@ -1,47 +1,29 @@
 import _gdbm
+import collections
 import logging
 import os
 import secrets
 import shelve
-import sys
 
 import discord
 import requests
 from discord.ext import commands
+from preston import Preston
 
 from assets import Assets
 from callback_server import callback_server
-from refresh_tokens import refresh_tokens
-
-# Fix for Mutable Mapping collection being moved
-if sys.version_info.major == 3 and sys.version_info.minor >= 10:
-    import collections
-
-    setattr(collections, "MutableMapping", collections.abc.MutableMapping)
-    setattr(collections, "Mapping", collections.abc.Mapping)
-
-from esipy import EsiApp
-from esipy import EsiClient
-from esipy import EsiSecurity
-from esipy.exceptions import APIException
 
 # Configure the logger
 logger = logging.getLogger('discord.refresh')
 logger.setLevel(logging.INFO)
 
-# Setup ESIPy
-esi_app = EsiApp().get_latest_swagger
-esi_security = EsiSecurity(
-    redirect_uri=os.environ["CCP_REDIRECT_URI"],
+# Setup ESI connection
+base_preston = Preston(
+    user_agent="Hangar organizing discord bot by larynx.austrene@gmail.com",
     client_id=os.environ["CCP_CLIENT_ID"],
-    secret_key=os.environ["CCP_SECRET_KEY"],
-    headers={'User-Agent': 'Hangar organizing discord bot by larynx.austrene@gmail.com'},
-)
-
-esi_client = EsiClient(
-    retry_requests=True,
-    headers={'User-Agent': 'Hangar organizing discord bot by larynx.austrene@gmail.com'},
-    security=esi_security
+    client_secret=os.environ["CCP_SECRET_KEY"],
+    callback_url=os.environ["CCP_REDIRECT_URI"],
+    scope="esi-assets.read_assets.v1",
 )
 
 # Setup Discord
@@ -51,19 +33,24 @@ intent.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intent)
 
 
-def get_author_assets(author_id: str):
+def with_refresh(preston_instance, refresh_token: str):
+    new_kwargs = dict(preston_instance._kwargs)
+    new_kwargs["refresh_token"] = refresh_token
+    new_kwargs["access_token"] = None
+    return Preston(**new_kwargs)
+
+
+def get_author_ps(author_id: str):
     with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-        for character_id, tokens in author_character_tokens[author_id].items():
-            esi_security.update_token(tokens)
-            tokens = esi_security.refresh()
-            author_character_tokens[author_id][character_id] = tokens
+        for character_id, token in author_character_tokens[author_id].items():
+            character_preston = with_refresh(base_preston, token)
+            yield character_preston
 
-            character_data = esi_security.verify()
-            character_id = character_data["sub"].split(':')[-1]
-            character_name = character_data["name"]
 
-            assets = Assets(character_id, esi_app, esi_client, character_name=character_name)
-            yield assets
+def get_author_assets(author_id: str):
+    for p in get_author_ps(author_id=author_id):
+        assets = Assets(p)
+        yield assets
 
 
 async def send_large_message(ctx, message, max_chars=2000):
@@ -89,8 +76,7 @@ async def send_large_message(ctx, message, max_chars=2000):
 
 @bot.event
 async def on_ready():
-    refresh_tokens.start(esi_security)
-    callback_server.start(esi_security)
+    callback_server.start(base_preston)
 
 
 @bot.command()
@@ -100,9 +86,10 @@ async def state(ctx):
     logger.info(f"{ctx.author.name} used !state")
 
     try:
+        await ctx.send("Fetching assets...")
         files_to_send = []
         for assets in get_author_assets(str(ctx.author.id)):
-            assets.save_state(f"data/states/{assets.character_name}.yaml")
+            assets.save_requirement(f"data/states/{assets.character_name}.yaml")
             with open(f"data/states/{assets.character_name}.yaml", "rb") as file:
                 files_to_send.append(discord.File(file, filename=f"{assets.character_name}.yaml"))
 
@@ -110,8 +97,6 @@ async def state(ctx):
             await ctx.send("Here are your current ship states.", files=files_to_send)
         else:
             await ctx.send("You have no authorized characters!")
-    except APIException:
-        await ctx.send("Authorization ran out!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
 
@@ -123,26 +108,37 @@ async def check(ctx):
     logger.info(f"{ctx.author.name} used !check")
 
     try:
-        state_errors = []
+        await ctx.send("Fetching assets...")
         has_characters = False
+        has_errors = False
+        message = ""
         for assets in get_author_assets(str(ctx.author.id)):
-            state_error_body = assets.check_state(f"data/reqs/{ctx.author.id}.yaml")
-            if state_error_body:
-                state_errors.append(f"**{assets.character_name}:**\n{state_error_body}")
             has_characters = True
+            name = f"**{assets.character_name}:**\n"
+            for ship_error_message in assets.check_requirement(f"data/reqs/{ctx.author.id}.yaml"):
+                has_errors = True
 
-        state_errors_body = "\n\n".join(state_errors)
-        if state_errors_body:
-            await send_large_message(ctx, f"**State Errors:**\n{state_errors_body}")
-        else:
-            if has_characters:
-                await ctx.send("**No State Errors found!**")
+                # Try to send current message chunk if current stuff would not fit
+                if len(message) + len(ship_error_message) + len(name) > 1990:
+                    await ctx.send(message)
+                    message = ""
+
+                if len(name) > 0:
+                    message += name
+                    name = ""
+
+                message += f"{ship_error_message}\n"
+
+        if has_characters:
+            if has_errors:
+                await ctx.send(message)
             else:
-                await ctx.send("You have no authorized characters!")
+                await ctx.send("**No State Errors found!**")
+        else:
+            await ctx.send("You have no authorized characters!")
+
     except FileNotFoundError:
         await ctx.send("You have not set a requirements file, use the !set command and upload one!")
-    except APIException:
-        await ctx.send("Authorization ran out!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
 
@@ -154,7 +150,8 @@ async def buy(ctx):
     logger.info(f"{ctx.author.name} used !buy")
 
     try:
-        buy_list = collections.defaultdict(int)
+        await ctx.send("Fetching assets...")
+        buy_list = collections.Counter()
         has_characters = False
         for assets in get_author_assets(str(ctx.author.id)):
             buy_list = assets.get_buy_list(f"data/reqs/{ctx.author.id}.yaml", buy_list=buy_list)
@@ -170,8 +167,6 @@ async def buy(ctx):
                 await ctx.send("You have no authorized characters!")
     except FileNotFoundError:
         await ctx.send("You have not set a requirements file, use the !set command and upload one!")
-    except APIException:
-        await ctx.send("Authorization ran out!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
 
@@ -209,11 +204,11 @@ async def auth(ctx):
     logger.info(f"{ctx.author.name} used !auth")
 
     try:
-        secret_state = secrets.token_urlsafe(30)
+        secret_state = secrets.token_urlsafe(60)
         with shelve.open('../data/challenges', writeback=True) as challenges:
-            challenges[secret_state] = ctx.author.id
-        uri = esi_security.get_auth_uri(state=secret_state, scopes=['esi-assets.read_assets.v1'])
-        await ctx.author.send(f"Use this [authentication link]({uri}) to authorize your characters.")
+            challenges[secret_state] = str(ctx.author.id)
+        await ctx.author.send(
+            f"Use this [authentication link]({base_preston.get_authorize_url()}&state={secret_state}) to authorize your characters.")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
 
@@ -225,24 +220,15 @@ async def characters(ctx):
     logger.info(f"{ctx.author.name} used !characters")
 
     try:
-        author_id = str(ctx.author.id)
         character_names = []
-        with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-            for character_id, tokens in author_character_tokens[author_id].items():
-                esi_security.update_token(tokens)
-                tokens = esi_security.refresh()
-                author_character_tokens[author_id][character_id] = tokens
-
-                character_data = esi_security.verify()
-                character_names.append(character_data["name"])
+        for p in get_author_ps(str(ctx.author.id)):
+            character_names.append(p.whoami()["CharacterName"])
 
         if character_names:
             character_names_body = "\n".join(character_names)
             await ctx.send(f"You have the following character(s) authenticated:\n{character_names_body}")
         else:
             await ctx.send("You have no authorized characters!")
-    except APIException:
-        await ctx.send("Authorization ran out!")
     except _gdbm.error:
         await ctx.send("Currently busy with another command!")
 
@@ -252,23 +238,7 @@ async def revoke(ctx):
     """Revokes ESI access from all your characters."""
 
     logger.info(f"{ctx.author.name} used !revoke")
-
-    try:
-        author_id = str(ctx.author.id)
-        with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
-            for character_id, tokens in author_character_tokens[author_id].items():
-                try:
-                    esi_security.update_token(tokens)
-                    esi_security.refresh()
-                    esi_security.revoke()
-                except APIException:
-                    pass
-
-            author_character_tokens[author_id] = {}
-
-        await ctx.send("Revoked all characters(') API access!\n")
-    except _gdbm.error:
-        await ctx.send("Currently busy with another command!")
+    await ctx.send("Currently not implemented!")
 
 
 if __name__ == "__main__":

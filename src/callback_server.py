@@ -1,18 +1,9 @@
 import logging
 import shelve
-import sys
 
 from aiohttp import web
 from discord.ext import tasks
-
-# Fix for Mutable Mapping collection being moved
-if sys.version_info.major == 3 and sys.version_info.minor >= 10:
-    import collections
-
-    setattr(collections, "MutableMapping", collections.abc.MutableMapping)
-    setattr(collections, "Mapping", collections.abc.Mapping)
-
-from esipy.exceptions import APIException
+from preston import preston
 
 # Configure the logger
 logger = logging.getLogger('callback')
@@ -20,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 
 @tasks.loop()
-async def callback_server(esi_security):
+async def callback_server(preston: preston.Preston):
     routes = web.RouteTableDef()
 
     @routes.get('/')
@@ -41,23 +32,28 @@ async def callback_server(esi_security):
             return web.Response(text="Authentication failed: State Missmatch", status=403)
 
         try:
-            tokens = esi_security.auth(code)
-
-            character_data = esi_security.verify()
-            character_id = character_data["sub"].split(':')[-1]
-            character_name = character_data["name"]
-        except APIException:
+            auth = preston.authenticate(code)
+        except Exception as e:
+            logger.error(e)
             logger.warning(f"failed to verify token")
-            return web.Response(text="Authentication failed: Token Invalid", status=403)
+            return web.Response(text="Authentication failed!", status=403)
+
+        character_data = auth.whoami()
+        logger.info(f"authenticated user data : {character_data}")
+
+        character_id = character_data["CharacterID"]
 
         # Store tokens under author
         with shelve.open('../data/tokens', writeback=True) as author_character_tokens:
             if author_id not in author_character_tokens:
-                author_character_tokens[author_id] = {character_id: tokens}
+                author_character_tokens[author_id] = {character_id: auth.refresh_token}
             else:
-                author_character_tokens[author_id][character_id] = tokens
+                author_character_tokens[author_id][character_id] = auth.refresh_token
 
-        logger.info(f"added {character_id}")
+        logger.info(f"Added character {character_id}")
+
+        character_name = character_data["CharacterName"]
+
         return web.Response(text=f"Sucessfully authentiated {character_name}!")
 
     app = web.Application()
