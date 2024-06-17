@@ -124,9 +124,9 @@ async def check(ctx):
         async for assets in get_author_assets(ctx.author.id):
             has_characters = True
             if assets.is_corporation:
-                name = f"**{assets.corporation_name}:**\n"
+                name = f"\n## {assets.corporation_name}:\n"
             else:
-                name = f"**{assets.character_name}:**\n"
+                name = f"\n## {assets.character_name}\n"
 
             for ship_error_message in assets.check_requirement(f"data/reqs/{ctx.author.id}.yaml"):
                 has_errors = True

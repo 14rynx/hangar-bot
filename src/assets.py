@@ -166,9 +166,15 @@ class Assets:
                 if ship.full_name == target_name:
                     difference = Counter(target_contents) - ship.item_counts
 
-                    out = f"{ship.full_name}:\n"
-                    out += "\n".join([f"{name} missing {count}" for name, count in difference.items() if count > 0])
-                    yield out
+                    out = f"### {ship.full_name}:"
+                    has_missing = False
+                    for name, count in difference.items():
+                        if count > 0:
+                            has_missing = True
+                            out += f"\n- Missing {count}x {name}"
+
+                    if has_missing:
+                        yield out
 
     def get_buy_list(self, requirement_path, buy_list=None):
 
