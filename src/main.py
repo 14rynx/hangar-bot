@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import secrets
@@ -171,7 +172,7 @@ async def satisfaction(ctx):
 
             requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
 
-            comp_items = user_items
+            comp_items = copy.copy(user_items)
             satisfaction_counts[requirement_name] = 0
 
             while True:
@@ -209,7 +210,7 @@ async def missing(ctx):
         # Process each requirement set
         for i, (ship_counter, item_counter) in enumerate(comp_requirements):
 
-            comp_items = user_items
+            comp_items = copy.copy(user_items)
             satisfaction_count = 0
 
             while True:
