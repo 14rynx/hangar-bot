@@ -6,3 +6,4 @@ data/states/*
 data/reqs/*
 secrets.json
 .env
+credentials.json
