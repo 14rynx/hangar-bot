@@ -11,11 +11,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=web"
-      - "traefik.http.routers.hangar-secure.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.hangar-secure.entrypoints=websecure"
-      - "traefik.http.routers.hangar-secure.tls=true"
-      - "traefik.http.routers.hangar-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.hangar-secure.loadbalancer.server.port=80"
+      - "traefik.http.routers.at-hangar-secure.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.at-hangar-secure.entrypoints=websecure"
+      - "traefik.http.routers.at-hangar-secure.tls=true"
+      - "traefik.http.routers.at-hangar-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.at-hangar-secure.loadbalancer.server.port=80"
     networks:
       - web
 volumes:
