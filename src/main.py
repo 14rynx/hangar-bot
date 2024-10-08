@@ -185,7 +185,7 @@ async def satisfaction(ctx):
     if comp_requirements:
         message = "**Satisfaction Counts:**\n"
         for i, (requirement_name, count) in enumerate(satisfaction_counts.items()):
-            message += f"- Comp {i} x{count} (Ships {requirement_name})\n"
+            message += f"- Comp {i} x{count} (Ships: {requirement_name})\n"
     else:
         message = "No requirements provided!"
 
@@ -223,11 +223,11 @@ async def missing(ctx):
 
             # Prepare the message
             if satisfaction_count > 0:
-                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships {requirement_name})**\n"
+                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
                 message += f"To satisfy it one more time, you need:\n```"
 
             else:
-                message = f"**Comp {i} is not satisfied yet (Ships {requirement_name})**\n```"
+                message = f"**Comp {i} is not satisfied yet (Ships: {requirement_name})**\n"
                 message += f"Missing the following items:\n```"
 
             for item, count in missing_items.items():
