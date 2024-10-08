@@ -184,12 +184,13 @@ async def satisfaction(ctx):
 
     if comp_requirements:
         message = "**Satisfaction Counts:**\n"
-        for requirement_name, count in satisfaction_counts.items():
-            message += f"{requirement_name}: {count} times\n"
+        for i, (requirement_name, count) in enumerate(satisfaction_counts.items()):
+            message += f"- Comp {i} ({requirement_name}): x{count}\n"
     else:
-        message = "No requirements provided"
+        message = "No requirements provided!"
 
     await send_large_message(ctx, message)
+
 
 
 @bot.command()
@@ -203,21 +204,36 @@ async def missing(ctx):
     async for assets in get_author_assets(ctx.author.id):
         user_items = assets.item_counts()
 
+        # Process each requirement set
         for ship_counter, item_counter in comp_requirements:
 
             requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
 
-            # Find items that are in item_counter but not in intersection with available items
-            intersection = user_items & item_counter
-            missing_items = item_counter - intersection
+            satisfaction_count = 0
+            while True:
+                # If the intersection is smaller than the requirement we stop
+                intersection = user_items & item_counter
+                if intersection.total() != item_counter.total():
+                    missing_items = item_counter - intersection
+                    break
 
-            if missing_items:
-                message = f"**{requirement_name} is missing the following items:**\n"
-                for item, count in missing_items.items():
-                    message += f"- {item} x{count}\n"
+                # Remove items that are no longer there, this might delete values of 0!
+                user_items -= item_counter
+                satisfaction_count += 1
+
+            # Prepare the message
+            if satisfaction_count > 0:
+                message = f"**{requirement_name} is satisfied {satisfaction_count} times**\n"
+                message += f"To satisfy it one more time, you need:\n```"
+
             else:
-                message = f"**{requirement_name} is fully satisfied!**"
+                message = f"**{requirement_name} is not satisfied yet. Missing the following items:**\n```"
 
+            for item, count in missing_items.items():
+                message += f"{item} x{count}\n"
+            message += "```"
+
+            # Send the message for each requirement
             await send_large_message(ctx, message)
 
     if not comp_requirements:
