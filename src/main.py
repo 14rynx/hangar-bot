@@ -160,7 +160,7 @@ async def on_ready():
 async def satisfaction(ctx):
     """Check how many times each requirement set is fully satisfied by your assets."""
     logger.info(f"{ctx.author.name} used !satisfaction")
-    if int(ctx.author.id) in [242164531151765505, 131845161645899777]:
+    if int(ctx.author.id) not in [242164531151765505, 131845161645899777]:
         await ctx.send("You are not allowed to use this command!")
         return
 
@@ -204,7 +204,7 @@ async def satisfaction(ctx):
 async def missing(ctx):
     """Check what is missing for each requirement set to be satisfied one more time."""
     logger.info(f"{ctx.author.name} used !missing")
-    if int(ctx.author.id) in [242164531151765505, 131845161645899777]:
+    if int(ctx.author.id) not in [242164531151765505, 131845161645899777]:
         await ctx.send("You are not allowed to use this command!")
         return
 
