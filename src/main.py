@@ -185,7 +185,7 @@ async def satisfaction(ctx):
     if comp_requirements:
         message = "**Satisfaction Counts:**\n"
         for i, (requirement_name, count) in enumerate(satisfaction_counts.items()):
-            message += f"- Comp {i} ({requirement_name}): x{count}\n"
+            message += f"- Comp {i} x{count} (Ships {requirement_name})\n"
     else:
         message = "No requirements provided!"
 
@@ -205,7 +205,7 @@ async def missing(ctx):
         user_items = assets.item_counts()
 
         # Process each requirement set
-        for ship_counter, item_counter in comp_requirements:
+        for i, (ship_counter, item_counter) in enumerate(comp_requirements):
 
             requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
 
@@ -223,11 +223,12 @@ async def missing(ctx):
 
             # Prepare the message
             if satisfaction_count > 0:
-                message = f"**{requirement_name} is satisfied {satisfaction_count} times**\n"
+                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships {requirement_name})**\n"
                 message += f"To satisfy it one more time, you need:\n```"
 
             else:
-                message = f"**{requirement_name} is not satisfied yet. Missing the following items:**\n```"
+                message = f"**Comp {i} is not satisfied yet (Ships {requirement_name})**\n```"
+                message += f"Missing the following items:\n```"
 
             for item, count in missing_items.items():
                 message += f"{item} x{count}\n"
