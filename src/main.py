@@ -167,17 +167,20 @@ async def satisfaction(ctx):
     async for assets in get_author_assets(ctx.author.id):
         user_items = assets.item_counts()
 
-        for ship_counter, all_counter in comp_requirements:
+        for ship_counter, item_counter in comp_requirements:
 
-            requirement_name = str(ship_counter)
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
 
             satisfaction_counts[requirement_name] = 0
             while True:
-                difference = user_items - all_counter
-                if any(count < 0 for count in difference.values()):
+                # If the intersection is smaller than the requirement we stop
+                intersection = user_items & item_counter
+                if intersection.total() != item_counter.total():
                     break
+
+                # Remove items that are no longer there, this might delete values of 0!
+                user_items -= item_counter
                 satisfaction_counts[requirement_name] += 1
-                user_items = difference
 
     if comp_requirements:
         message = "**Satisfaction Counts:**\n"
@@ -200,18 +203,18 @@ async def missing(ctx):
     async for assets in get_author_assets(ctx.author.id):
         user_items = assets.item_counts()
 
-        for ship_counter, all_counter in comp_requirements:
+        for ship_counter, item_counter in comp_requirements:
 
-            requirement_name = str(ship_counter)
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
 
-            difference = user_items - all_counter
-
-            missing_items = {item: -count for item, count in difference.items() if count < 0}
+            # Find items that are in item_counter but not in intersection with available items
+            intersection = user_items & item_counter
+            missing_items = item_counter - intersection
 
             if missing_items:
                 message = f"**{requirement_name} is missing the following items:**\n"
                 for item, count in missing_items.items():
-                    message += f"- {item}: {count} more needed\n"
+                    message += f"- {item} x{count}\n"
             else:
                 message = f"**{requirement_name} is fully satisfied!**"
 
