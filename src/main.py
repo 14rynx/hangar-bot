@@ -171,15 +171,17 @@ async def satisfaction(ctx):
 
             requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
 
+            comp_items = user_items
             satisfaction_counts[requirement_name] = 0
+
             while True:
                 # If the intersection is smaller than the requirement we stop
-                intersection = user_items & item_counter
+                intersection = comp_items & item_counter
                 if intersection.total() != item_counter.total():
                     break
 
                 # Remove items that are no longer there, this might delete values of 0!
-                user_items -= item_counter
+                comp_items -= item_counter
                 satisfaction_counts[requirement_name] += 1
 
     if comp_requirements:
@@ -207,21 +209,23 @@ async def missing(ctx):
         # Process each requirement set
         for i, (ship_counter, item_counter) in enumerate(comp_requirements):
 
-            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
-
+            comp_items = user_items
             satisfaction_count = 0
+
             while True:
                 # If the intersection is smaller than the requirement we stop
-                intersection = user_items & item_counter
+                intersection = comp_items & item_counter
                 if intersection.total() != item_counter.total():
                     missing_items = item_counter - intersection
                     break
 
                 # Remove items that are no longer there, this might delete values of 0!
-                user_items -= item_counter
+                comp_items -= item_counter
                 satisfaction_count += 1
 
             # Prepare the message
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+
             if satisfaction_count > 0:
                 message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
                 message += f"To satisfy it one more time, you need:\n```"
