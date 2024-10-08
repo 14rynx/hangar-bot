@@ -3,7 +3,7 @@ services:
   hangar:
     build: '.'
     restart: unless-stopped
-    container_name: hangar-bot
+    container_name: at-hangar-bot
     env_file:
       .env
     volumes:
