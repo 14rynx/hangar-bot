@@ -1,16 +1,83 @@
-import collections
 import logging
 import os
 import secrets
+from collections import Counter
 
 import discord
-import requests
 from discord.ext import commands
+from google.oauth2 import service_account
+from googleapiclient import discovery
 from preston import Preston
 
 from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge
+
+logger = logging.getLogger('discord.main')
+logger.setLevel(logging.INFO)
+
+
+
+
+# Google Sheets setup
+def get_sheet_service():
+    scopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.file",
+              "https://www.googleapis.com/auth/spreadsheets"]
+    credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    service = discovery.build('sheets', 'v4', credentials=credentials)
+    return service
+
+
+def lines_to_counter(lines):
+    items = Counter()
+    for item in lines:
+        if "[" in item or item == "":
+            continue
+        if ', ' in item:
+            item = item.split(", ")[0]
+        if ' x' in item:
+            name, count = item.rsplit(" x", 1)
+            items[name.strip()] += int(count)
+        else:
+            items[item.strip()] += 1
+    return items
+
+
+def eft_to_counter(eft):
+    if "FLAG" in eft:
+        return Counter(), Counter()
+    eft = eft.replace('\r', '')
+    sections = eft.strip().split("\n\n\n")
+    title_item = sections[0].split(",")[0].strip("[]")
+    ship_counter = Counter()
+    ship_counter[title_item] += 1
+    all_counter = lines_to_counter(sections[0].splitlines()) + lines_to_counter(
+        "\n".join(sections[1:]).splitlines()) + ship_counter
+    return ship_counter, all_counter
+
+
+def fetch_requirements():
+    sheet_service = get_sheet_service()
+    result = sheet_service.spreadsheets().values().get(spreadsheetId=os.environ["SPREADSHEET_ID"], range=os.environ["RANGE"]).execute()
+    inputs = result.get('values', [])
+
+    comp_requirements = []
+    all_counter = Counter()
+    ship_counter = Counter()
+    for row in inputs:
+        eft = row[0] if row else ""
+        if "Fit" in eft:
+            if all_counter:
+                comp_requirements.append((ship_counter, all_counter))
+            all_counter = Counter()
+            ship_counter = Counter()
+        elif "[" in eft:
+            ship_local, all_local = eft_to_counter(eft)
+            ship_counter += ship_local
+            all_counter += all_local
+
+    return comp_requirements
+
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -89,117 +156,69 @@ async def on_ready():
 
 
 @bot.command()
-async def state(ctx):
-    """Returns the current state of all your ships in yaml format. (Useful for first setting things up)"""
-    logger.info(f"{ctx.author.name} used !state")
+async def satisfaction(ctx):
+    """Check how many times each requirement set is fully satisfied by your assets."""
+    logger.info(f"{ctx.author.name} used !satisfaction")
+    await ctx.send("Fetching assets and requirements...")
 
-    await ctx.send("Fetching assets...")
-    files_to_send = []
+    comp_requirements = fetch_requirements()
+    satisfaction_counts = Counter()
+
     async for assets in get_author_assets(ctx.author.id):
-        if assets.is_corporation:
-            filename = f"{assets.corporation_name}.yaml"
-        else:
-            filename = f"{assets.character_name}.yaml"
+        user_items = assets.item_counts()
 
-        assets.save_requirement("data/states/" + filename)
-        with open("data/states/" + filename, "rb") as file:
-            files_to_send.append(discord.File(file, filename=filename))
+        for ship_counter, all_counter in comp_requirements:
 
-    if files_to_send:
-        await ctx.send("Here are your current ship states.", files=files_to_send)
+            requirement_name = str(ship_counter)
+
+            satisfaction_counts[requirement_name] = 0
+            while True:
+                difference = user_items - all_counter
+                if any(count < 0 for count in difference.values()):
+                    break
+                satisfaction_counts[requirement_name] += 1
+                user_items = difference
+
+    if comp_requirements:
+        message = "**Satisfaction Counts:**\n"
+        for requirement_name, count in satisfaction_counts.items():
+            message += f"{requirement_name}: {count} times\n"
     else:
-        await ctx.send("You have no authorized characters!")
+        message = "No requirements provided"
+
+    await send_large_message(ctx, message)
 
 
 @bot.command()
-async def check(ctx):
-    """Returns a bullet point list of what ships are missing things."""
-    logger.info(f"{ctx.author.name} used !check")
+async def missing(ctx):
+    """Check what is missing for each requirement set to be satisfied one more time."""
+    logger.info(f"{ctx.author.name} used !missing")
+    await ctx.send("Fetching assets and requirements...")
 
-    try:
-        await ctx.send("Fetching assets...")
-        has_characters = False
-        has_errors = False
-        message = ""
-        async for assets in get_author_assets(ctx.author.id):
-            has_characters = True
-            if assets.is_corporation:
-                name = f"\n## {assets.corporation_name}:\n"
+    comp_requirements = fetch_requirements()
+
+    async for assets in get_author_assets(ctx.author.id):
+        user_items = assets.item_counts()
+
+        for ship_counter, all_counter in comp_requirements:
+
+            requirement_name = str(ship_counter)
+
+            difference = user_items - all_counter
+
+            missing_items = {item: -count for item, count in difference.items() if count < 0}
+
+            if missing_items:
+                message = f"**{requirement_name} is missing the following items:**\n"
+                for item, count in missing_items.items():
+                    message += f"- {item}: {count} more needed\n"
             else:
-                name = f"\n## {assets.character_name}\n"
+                message = f"**{requirement_name} is fully satisfied!**"
 
-            for ship_error_message in assets.check_requirement(f"data/reqs/{ctx.author.id}.yaml"):
-                has_errors = True
+            await send_large_message(ctx, message)
 
-                if len(message) + len(ship_error_message) + len(name) > 1990:
-                    await ctx.send(message)
-                    message = ""
-
-                if len(name) > 0:
-                    message += name
-                    name = ""
-
-                message += f"{ship_error_message}\n"
-
-        if has_characters:
-            if has_errors:
-                await ctx.send(message)
-            else:
-                await ctx.send("**No State Errors found!**")
-        else:
-            await ctx.send("You have no authorized characters!")
-
-    except FileNotFoundError:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
-
-
-@bot.command()
-async def buy(ctx):
-    """Returns a multibuy of all the things missing in your ships."""
-    logger.info(f"{ctx.author.name} used !buy")
-
-    try:
-        await ctx.send("Fetching assets...")
-        buy_list = collections.Counter()
-        has_characters = False
-        async for assets in get_author_assets(ctx.author.id):
-            buy_list = assets.get_buy_list(f"data/reqs/{ctx.author.id}.yaml", buy_list=buy_list)
-            has_characters = True
-
-        buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
-        if buy_list_body:
-            await send_large_message(ctx, f"**Buy List:**\n```{buy_list_body}```")
-        else:
-            if has_characters:
-                await ctx.send("**Nothing to buy!**")
-            else:
-                await ctx.send("You have no authorized characters!")
-    except FileNotFoundError:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
-
-
-@bot.command()
-async def set(ctx, attachment: discord.Attachment):
-    """Sets your current requirement file to the one attached to this command."""
-    logger.info(f"{ctx.author.name} used !set")
-
-    if attachment:
-        response = requests.get(attachment.url, allow_redirects=True)
-        with open(f"data/reqs/{ctx.author.id}.yaml", 'wb') as file:
-            file.write(response.content)
-        await ctx.send("Set new requirements file!")
-    else:
-        await ctx.send("You forgot to attach a new requirement file!")
-
-
-@bot.command()
-async def get(ctx):
-    """Returns your current requirements."""
-    logger.info(f"{ctx.author.name} used !get")
-
-    with open(f"data/reqs/{ctx.author.id}.yaml", "rb") as file:
-        requirements = discord.File(file, filename=f"requirements.yaml")
-    await ctx.send("Here is your current requirement file.", file=requirements)
+    if not comp_requirements:
+        await ctx.send("No requirements provided.")
 
 
 @bot.command()

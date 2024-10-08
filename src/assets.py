@@ -83,10 +83,12 @@ class Assets:
         page = 1
         while True:
             if self.is_corporation:
-                result = self.preston.get_op('get_corporations_corporation_id_assets', corporation_id=self.corporation_id,
-                                        page=page)
+                result = self.preston.get_op('get_corporations_corporation_id_assets',
+                                             corporation_id=self.corporation_id,
+                                             page=page)
             else:
-                result = self.preston.get_op('get_characters_character_id_assets', character_id=self.character_id, page=page)
+                result = self.preston.get_op('get_characters_character_id_assets', character_id=self.character_id,
+                                             page=page)
             if "error" in result:
                 if "Requested page does not exist!" in result["error"]:
                     break
@@ -192,3 +194,14 @@ class Assets:
                     buy_list += missing
 
         return buy_list
+
+    def item_counts(self):
+        """Returns the total item counts for all assets"""
+        counter = Counter()
+
+        # Count items from root items (items not part of other items)
+        for item in self.root_items:
+            counter += Counter({item.type_name: item.quantity})
+            counter += item.item_counts
+
+        return counter
