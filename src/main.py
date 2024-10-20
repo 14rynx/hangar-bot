@@ -45,8 +45,8 @@ def lines_to_counter(lines):
 
 
 def eft_to_counter(eft):
-    if "FLAG" in eft:
-        return Counter(), Counter()
+
+
     eft = eft.replace('\r', '')
     sections = eft.strip().split("\n\n\n")
     title_item = sections[0].split(",")[0].strip("[]")
@@ -54,6 +54,11 @@ def eft_to_counter(eft):
     ship_counter[title_item] += 1
     all_counter = lines_to_counter(sections[0].splitlines()) + lines_to_counter(
         "\n".join(sections[1:]).splitlines()) + ship_counter
+
+    # Ignore FLAG fitting
+    if "FLAG" in eft:
+        return ship_counter, Counter()
+
     return ship_counter, all_counter
 
 
