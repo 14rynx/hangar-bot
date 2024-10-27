@@ -166,7 +166,7 @@ async def send_large_message(ctx, message, max_chars=1994):
 
         # Prepend message if the previous one ended with an open code-block
         if open_code_block:
-            message = f"```{message}"
+            part = f"```{part}"
 
         # Toggle if we are in a code-block
         if code_block_count % 2 == 1:
@@ -174,7 +174,7 @@ async def send_large_message(ctx, message, max_chars=1994):
 
         # Post-pend message if we are still in a code-block
         if open_code_block:
-            message = f"{message}```"
+            part = f"{part}```"
 
         # Send the current part
         await ctx.send(part)
