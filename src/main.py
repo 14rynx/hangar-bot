@@ -18,8 +18,6 @@ logger = logging.getLogger('discord.main')
 logger.setLevel(logging.INFO)
 
 
-
-
 # Google Sheets setup
 def get_sheet_service():
     scopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.file",
@@ -45,8 +43,6 @@ def lines_to_counter(lines):
 
 
 def eft_to_counter(eft):
-
-
     eft = eft.replace('\r', '')
     sections = eft.strip().split("\n\n\n")
     title_item = sections[0].split(",")[0].strip("[]")
@@ -64,7 +60,8 @@ def eft_to_counter(eft):
 
 def fetch_requirements():
     sheet_service = get_sheet_service()
-    result = sheet_service.spreadsheets().values().get(spreadsheetId=os.environ["SPREADSHEET_ID"], range=os.environ["RANGE"]).execute()
+    result = sheet_service.spreadsheets().values().get(spreadsheetId=os.environ["SPREADSHEET_ID"],
+                                                       range=os.environ["RANGE"]).execute()
     inputs = result.get('values', [])
 
     comp_requirements = []
@@ -140,20 +137,47 @@ async def get_author_assets(author_id: int):
                 yield a
 
 
-async def send_large_message(ctx, message, max_chars=2000):
+async def send_large_message(ctx, message, max_chars=1994):
+    open_code_block = False
+
     while len(message) > 0:
+        # If the remaining message fits within max_chars, send it as is
         if len(message) <= max_chars:
+            # Prepend message if the previous one ended with an open code-block
+            if open_code_block:
+                message = f"```{message}"
+
             await ctx.send(message)
             break
 
+        # Find the last newline within the max_chars limit
         last_newline_index = message.rfind('\n', 0, max_chars)
 
+        # If no newline found within limit, cut at max_chars
         if last_newline_index == -1:
-            await ctx.send(message[:max_chars])
+            part = message[:max_chars]
             message = message[max_chars:]
         else:
-            await ctx.send(message[:last_newline_index])
+            part = message[:last_newline_index]
             message = message[last_newline_index + 1:]
+
+        # Count the number of backticks to see if the split ends in a codeblock
+        code_block_count = part.count("```")
+
+        # Prepend message if the previous one ended with an open code-block
+        if open_code_block:
+            message = f"```{message}"
+
+        # Toggle if we are in a code-block
+        if code_block_count % 2 == 1:
+            open_code_block = not open_code_block
+
+        # Post-pend message if we are still in a code-block
+        if open_code_block:
+            message = f"{message}```"
+
+        # Send the current part
+        await ctx.send(part)
 
 
 @bot.event
@@ -202,7 +226,6 @@ async def satisfaction(ctx):
         message = "No requirements provided!"
 
     await send_large_message(ctx, message)
-
 
 
 @bot.command()
@@ -254,6 +277,62 @@ async def missing(ctx):
 
             # Send the message for each requirement
             await send_large_message(ctx, message)
+
+    if not comp_requirements:
+        await ctx.send("No requirements provided.")
+
+
+@bot.command()
+async def all(ctx):
+    """Check what is missing for each requirement set to be satisfied one more time."""
+    logger.info(f"{ctx.author.name} used !missing")
+    if int(ctx.author.id) not in [242164531151765505, 131845161645899777]:
+        await ctx.send("You are not allowed to use this command!")
+        return
+
+    await ctx.send("Fetching assets and requirements...")
+
+    comp_requirements = fetch_requirements()
+
+    all_missing_items = Counter()
+
+    async for assets in get_author_assets(ctx.author.id):
+        user_items = assets.item_counts()
+
+        # Process each requirement set
+        for i, (ship_counter, item_counter) in enumerate(comp_requirements):
+
+            comp_items = copy.copy(user_items)
+            satisfaction_count = 0
+
+            while True:
+                # If the intersection is smaller than the requirement we stop
+                intersection = comp_items & item_counter
+                if intersection.total() != item_counter.total():
+                    missing_items = item_counter - intersection
+                    break
+
+                # Remove items that are no longer there, this might delete values of 0!
+                comp_items -= item_counter
+                satisfaction_count += 1
+
+            # Prepare the message
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+
+            if satisfaction_count > 0:
+                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
+            else:
+                all_missing_items = all_missing_items | missing_items
+                message = f"**Comp {i} is not satisfied yet (Ships: {requirement_name})**\n"
+
+            await ctx.send(message)
+
+        message = f"**Total missing items to run everything once**\n"
+        for item, count in all_missing_items.items():
+            message += f"{item} x{count}\n"
+
+        # Send the message for each requirement
+        await send_large_message(ctx, message)
 
     if not comp_requirements:
         await ctx.send("No requirements provided.")
