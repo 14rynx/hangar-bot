@@ -327,9 +327,10 @@ async def all(ctx):
 
             await ctx.send(message)
 
-        message = f"**Total missing items to run everything once**\n"
+        message = f"**Total missing items to run everything once**\n```"
         for item, count in all_missing_items.items():
             message += f"{item} x{count}\n"
+        message += "```"
 
         # Send the message for each requirement
         await send_large_message(ctx, message)
