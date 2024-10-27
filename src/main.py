@@ -285,7 +285,7 @@ async def missing(ctx):
 @bot.command()
 async def all(ctx):
     """Check what is missing for each requirement set to be satisfied one more time."""
-    logger.info(f"{ctx.author.name} used !missing")
+    logger.info(f"{ctx.author.name} used !all")
     if int(ctx.author.id) not in [242164531151765505, 131845161645899777]:
         await ctx.send("You are not allowed to use this command!")
         return
