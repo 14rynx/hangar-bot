@@ -198,11 +198,14 @@ async def set(ctx, attachment: discord.Attachment):
         requirements_content = response.content.decode('utf-8')  # Decode the content to a string
 
         # Upsert the user's requirements file into the database
-        user = User.get_or_create(user_id=str(ctx.author.id))
-        user.requirements_file = requirements_content
-        user.save()
+        user = User.get_or_none(user_id=str(ctx.author.id))
+        if user:
+            user.requirements_file = requirements_content
+            user.save()
+            await ctx.send("Set new requirements file!")
+        else:
+            await ctx.send("You currently have no linked characters, so having requirements makes no sense.")
 
-        await ctx.send("Set new requirements file!")
     else:
         await ctx.send("You forgot to attach a new requirement file!")
 
