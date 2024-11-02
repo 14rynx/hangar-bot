@@ -119,43 +119,41 @@ async def check(ctx):
     """Returns a bullet point list of what ships are missing things."""
     logger.info(f"{ctx.author.name} used !check")
 
-    try:
-        await ctx.send("Fetching assets...")
-        has_characters = False
-        has_errors = False
-        message = ""
-        async for assets in get_author_assets(ctx.author.id):
-            has_characters = True
-            if assets.is_corporation:
-                name = f"\n## {assets.corporation_name}:\n"
-            else:
-                name = f"\n## {assets.character_name}\n"
-
-            user = User.get_or_none(User.user_id == str(ctx.author.id))
-            if user and user.requirements_file:
-                for ship_error_message in assets.check_requirement(user.requirements_file):
-                    has_errors = True
-
-                    if len(message) + len(ship_error_message) + len(name) > 1990:
-                        await ctx.send(message)
-                        message = ""
-
-                    if len(name) > 0:
-                        message += name
-                        name = ""
-
-                    message += f"{ship_error_message}\n"
-
-        if has_characters:
-            if has_errors:
-                await ctx.send(message)
-            else:
-                await ctx.send("**No State Errors found!**")
+    await ctx.send("Fetching assets...")
+    has_characters = False
+    has_errors = False
+    message = ""
+    async for assets in get_author_assets(ctx.author.id):
+        has_characters = True
+        if assets.is_corporation:
+            name = f"\n## {assets.corporation_name}:\n"
         else:
-            await ctx.send("You have no authorized characters!")
+            name = f"\n## {assets.character_name}\n"
 
-    except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
+        user = User.get_or_none(User.user_id == str(ctx.author.id))
+        if user and user.requirements_file:
+            for ship_error_message in assets.check_requirement(user.requirements_file):
+                has_errors = True
+
+                if len(message) + len(ship_error_message) + len(name) > 1990:
+                    await ctx.send(message)
+                    message = ""
+
+                if len(name) > 0:
+                    message += name
+                    name = ""
+
+                message += f"{ship_error_message}\n"
+        else:
+            await ctx.send("You have not set a requirements file, use the !set command and upload one!")
+
+    if has_characters:
+        if has_errors:
+            await ctx.send(message)
+        else:
+            await ctx.send("**No State Errors found!**")
+    else:
+        await ctx.send("You have no authorized characters!")
 
 
 @bot.command()
@@ -163,29 +161,27 @@ async def buy(ctx):
     """Returns a multibuy of all the things missing in your ships."""
     logger.info(f"{ctx.author.name} used !buy")
 
-    try:
-        await ctx.send("Fetching assets...")
-        buy_list = collections.Counter()
-        has_characters = False
-        async for assets in get_author_assets(ctx.author.id):
-            has_characters = True
+    await ctx.send("Fetching assets...")
+    buy_list = collections.Counter()
+    has_characters = False
+    async for assets in get_author_assets(ctx.author.id):
+        has_characters = True
 
-            # Get the user's requirements from the database
-            user = User.get_or_none(User.user_id == str(ctx.author.id))
-            if user and user.requirements_file:
-                buy_list = assets.get_buy_list(user.requirements_file, buy_list=buy_list)
-
-        buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
-        if buy_list_body:
-            await send_large_message(ctx, f"**Buy List:**\n```{buy_list_body}```")
+        # Get the user's requirements from the database
+        user = User.get_or_none(User.user_id == str(ctx.author.id))
+        if user and user.requirements_file:
+            buy_list = assets.get_buy_list(user.requirements_file, buy_list=buy_list)
         else:
-            if has_characters:
-                await ctx.send("**Nothing to buy!**")
-            else:
-                await ctx.send("You have no authorized characters!")
+            await ctx.send("You have not set a requirements file, use the !set command and upload one!")
 
-    except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
+    buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
+    if buy_list_body:
+        await send_large_message(ctx, f"**Buy List:**\n```{buy_list_body}```")
+    else:
+        if has_characters:
+            await ctx.send("**Nothing to buy!**")
+        else:
+            await ctx.send("You have no authorized characters!")
 
 
 @bot.command()
