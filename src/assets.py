@@ -145,21 +145,19 @@ class Assets:
         for item in self.items:
             item.type_name = type_id_names.get(item.type_id, "Unknown Item")
 
-    def save_requirement(self, requirement_path):
-        # Generate the dictionary representation
+    def save_requirement(self):
+        """Generates and returns the requirements as a YAML string."""
         state = {}
         for ship in self.ships:
             # If there are multiple containers with the same name take the fullest one
             if ship.full_name not in state or ship.total_item_count > sum(state[ship.full_name].values()):
                 state[ship.full_name] = dict(ship.item_counts)
 
-        with open(requirement_path, "w") as file:
-            yaml.dump(state, file, yaml.CDumper)
+        return yaml.dump(state, Dumper=yaml.CDumper)
 
-    def check_requirement(self, requirement_path):
-        """Checks the state according to the requirements and returns any mismatches"""
-        with open(requirement_path, "r") as file:
-            requirements = yaml.load(file, yaml.CLoader)
+    def check_requirement(self, yaml_text):
+        """Checks the state according to the requirements and returns any mismatches."""
+        requirements = yaml.load(yaml_text, Loader=yaml.CLoader)
 
         for target_name, target_contents in requirements.items():
             for ship in self.ships:
@@ -176,13 +174,13 @@ class Assets:
                     if has_missing:
                         yield out
 
-    def get_buy_list(self, requirement_path, buy_list=None):
+    def get_buy_list(self, yaml_text, buy_list=None):
+        """Generates a buy list based on the requirements in the provided YAML text."""
 
         # Check if a previous buy list was passed, otherwise create an empty one
         buy_list = buy_list or Counter()
 
-        with open(requirement_path, "r") as file:
-            requirements = yaml.load(file, yaml.CLoader)
+        requirements = yaml.load(yaml_text, Loader=yaml.CLoader)
 
         for target_name, target_contents in requirements.items():
             for ship in self.ships:

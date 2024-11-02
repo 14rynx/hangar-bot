@@ -11,7 +11,7 @@ class BaseModel(Model):
 
 class User(BaseModel):
     user_id = CharField(primary_key=True)
-
+    requirements_file = TextField(null=True)  # Add a field to store the requirements file content
 
 class Character(BaseModel):
     character_id = CharField(primary_key=True)

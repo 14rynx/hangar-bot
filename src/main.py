@@ -2,6 +2,7 @@ import collections
 import logging
 import os
 import secrets
+from io import BytesIO, StringIO
 
 import discord
 import requests
@@ -95,15 +96,17 @@ async def state(ctx):
 
     await ctx.send("Fetching assets...")
     files_to_send = []
+
     async for assets in get_author_assets(ctx.author.id):
         if assets.is_corporation:
             filename = f"{assets.corporation_name}.yaml"
         else:
             filename = f"{assets.character_name}.yaml"
 
-        assets.save_requirement("data/states/" + filename)
-        with open("data/states/" + filename, "rb") as file:
-            files_to_send.append(discord.File(file, filename=filename))
+        yaml_text = assets.save_requirement()
+        discord_file = discord.File(StringIO(yaml_text), filename=filename)
+
+        files_to_send.append(discord_file)
 
     if files_to_send:
         await ctx.send("Here are your current ship states.", files=files_to_send)
@@ -128,18 +131,20 @@ async def check(ctx):
             else:
                 name = f"\n## {assets.character_name}\n"
 
-            for ship_error_message in assets.check_requirement(f"data/reqs/{ctx.author.id}.yaml"):
-                has_errors = True
+            user = User.get_or_none(User.user_id == str(ctx.author.id))
+            if user and user.requirements_file:
+                for ship_error_message in assets.check_requirement(user.requirements_file):
+                    has_errors = True
 
-                if len(message) + len(ship_error_message) + len(name) > 1990:
-                    await ctx.send(message)
-                    message = ""
+                    if len(message) + len(ship_error_message) + len(name) > 1990:
+                        await ctx.send(message)
+                        message = ""
 
-                if len(name) > 0:
-                    message += name
-                    name = ""
+                    if len(name) > 0:
+                        message += name
+                        name = ""
 
-                message += f"{ship_error_message}\n"
+                    message += f"{ship_error_message}\n"
 
         if has_characters:
             if has_errors:
@@ -149,8 +154,8 @@ async def check(ctx):
         else:
             await ctx.send("You have no authorized characters!")
 
-    except FileNotFoundError:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
 
 
 @bot.command()
@@ -163,8 +168,12 @@ async def buy(ctx):
         buy_list = collections.Counter()
         has_characters = False
         async for assets in get_author_assets(ctx.author.id):
-            buy_list = assets.get_buy_list(f"data/reqs/{ctx.author.id}.yaml", buy_list=buy_list)
             has_characters = True
+
+            # Get the user's requirements from the database
+            user = User.get_or_none(User.user_id == str(ctx.author.id))
+            if user and user.requirements_file:
+                buy_list = assets.get_buy_list(user.requirements_file, buy_list=buy_list)
 
         buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
         if buy_list_body:
@@ -174,8 +183,9 @@ async def buy(ctx):
                 await ctx.send("**Nothing to buy!**")
             else:
                 await ctx.send("You have no authorized characters!")
-    except FileNotFoundError:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
+
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
 
 
 @bot.command()
@@ -185,8 +195,13 @@ async def set(ctx, attachment: discord.Attachment):
 
     if attachment:
         response = requests.get(attachment.url, allow_redirects=True)
-        with open(f"data/reqs/{ctx.author.id}.yaml", 'wb') as file:
-            file.write(response.content)
+        requirements_content = response.content.decode('utf-8')  # Decode the content to a string
+
+        # Upsert the user's requirements file into the database
+        user = User.get_or_create(user_id=str(ctx.author.id))
+        user.requirements_file = requirements_content
+        user.save()
+
         await ctx.send("Set new requirements file!")
     else:
         await ctx.send("You forgot to attach a new requirement file!")
@@ -197,9 +212,12 @@ async def get(ctx):
     """Returns your current requirements."""
     logger.info(f"{ctx.author.name} used !get")
 
-    with open(f"data/reqs/{ctx.author.id}.yaml", "rb") as file:
-        requirements = discord.File(file, filename=f"requirements.yaml")
-    await ctx.send("Here is your current requirement file.", file=requirements)
+    user = User.get_or_none(User.user_id == str(ctx.author.id))
+    if user and user.requirements_file:
+        requirements = discord.File(fp=BytesIO(user.requirements_file.encode('utf-8')), filename="requirements.yaml")
+        await ctx.send("Here is your current requirement file.", file=requirements)
+    else:
+        await ctx.send("You don't have a requirements file set.")
 
 
 @bot.command()
