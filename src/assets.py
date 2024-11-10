@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections import Counter
 
 import yaml
@@ -92,6 +93,10 @@ class Assets:
         self.corp_hangars = []
 
     async def fetch(self):
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.sync_fetch)
+
+    def sync_fetch(self):
         # Fetch all available assets
         page = 1
         while True:
@@ -108,9 +113,6 @@ class Assets:
             else:
                 self.items.extend([Item(**x) for x in result])
                 page += 1
-
-            # Allow other things to catch up
-            await asyncio.sleep(0.2)
 
         # Index items by id for quick finding
         id_items = {x.item_id: x for x in self.items}
