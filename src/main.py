@@ -12,7 +12,7 @@ from preston import Preston
 from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
-from src.utils import lookup
+from utils import lookup
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
