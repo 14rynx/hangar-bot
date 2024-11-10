@@ -44,7 +44,7 @@ class Item:
             return True
 
         # Container in Corp Hangar
-        if "CorpSAG" in self.location_flag:
+        if "CorpSAG" in self.location_flag and len(self.subordinates) > 0:
             return True
 
         return False
@@ -88,7 +88,7 @@ class Assets:
 
         self.items = []
         self.root_items = []
-        self.items_of_interesst = []
+        self.items_of_interest = []
         self.corp_hangars = []
 
     async def fetch(self):
@@ -123,20 +123,20 @@ class Assets:
                 self.root_items.append(item)
 
         # Build list with ships
-        self.items_of_interesst = [x for x in self.items if x.is_assembled_ship or x.is_top_level_container]
+        self.items_of_interest = [x for x in self.items if x.is_assembled_ship or x.is_top_level_container]
 
         # Fetch the name of each container root item e.g. ship and container
         if self.is_corporation:
             result = self.preston.post_op(
                 'post_corporations_corporation_id_assets_names',
                 path_data={"corporation_id": self.corporation_id},
-                post_data=[x.item_id for x in self.items_of_interesst]
+                post_data=[x.item_id for x in self.items_of_interest]
             )
         else:
             result = self.preston.post_op(
                 'post_characters_character_id_assets_names',
                 path_data={"character_id": self.character_id},
-                post_data=[x.item_id for x in self.items_of_interesst]
+                post_data=[x.item_id for x in self.items_of_interest]
             )
 
         try:
@@ -161,7 +161,7 @@ class Assets:
     def save_requirement(self):
         """Generates and returns the requirements as a YAML string."""
         state = {}
-        for ship in self.items_of_interesst:
+        for ship in self.items_of_interest:
             # If there are multiple containers with the same name take the fullest one
             if ship.full_name not in state or ship.total_item_count > sum(state[ship.full_name].values()):
                 state[ship.full_name] = dict(ship.item_counts)
@@ -173,7 +173,7 @@ class Assets:
         requirements = yaml.load(yaml_text, Loader=yaml.CLoader)
 
         for target_name, target_contents in requirements.items():
-            for ship in self.items_of_interesst:
+            for ship in self.items_of_interest:
                 if ship.full_name == target_name:
                     difference = Counter(target_contents) - ship.item_counts
 
@@ -196,7 +196,7 @@ class Assets:
         requirements = yaml.load(yaml_text, Loader=yaml.CLoader)
 
         for target_name, target_contents in requirements.items():
-            for ship in self.items_of_interesst:
+            for ship in self.items_of_interest:
                 if ship.full_name == target_name:
                     difference = Counter(target_contents) - ship.item_counts
                     missing = Counter({k: max(0, v) for k, v in difference.items()})
