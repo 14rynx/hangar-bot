@@ -280,7 +280,7 @@ async def revoke(ctx, *args):
     try:
         user = User.get(User.user_id == str(ctx.author.id))
 
-        if not args:
+        if len(args) == 0:
             user_characters = Character.select().where(Character.user == user)
             user_characters.delete_instance()
             for character in user_characters:
@@ -294,8 +294,8 @@ async def revoke(ctx, *args):
 
             await ctx.send(f"Successfully revoked access to all your characters.")
 
-        if args[0] == '-c' and len(args) > 1:
-            corp_id = await lookup(base_preston, " ".join(args[1]), return_type="corporations")
+        elif args[0] == '-c' and len(args) > 1:
+            corp_id = await lookup(base_preston, " ".join(args[1:]), return_type="corporations")
             corp_characters = user.corporation_characters.select().where(CorporationCharacter.corporation_id == corp_id)
 
             for corp_character in corp_characters:
@@ -308,7 +308,7 @@ async def revoke(ctx, *args):
                     f"Successfully removed {len(corp_characters)} characters linked to you and this corporation.")
 
         else:
-            character_id = await lookup(base_preston, " ".join(args[0]), return_type="characters")
+            character_id = await lookup(base_preston, " ".join(args), return_type="characters")
             character = user.characters.select().where(Character.character_id == character_id).first()
             character.delete_instance()
             await ctx.send(f"Successfully removed your character.")
@@ -316,7 +316,8 @@ async def revoke(ctx, *args):
     except User.DoesNotExist:
         await ctx.send(f"You did not have any authorized characters in the first place.")
     except ValueError:
-        await ctx.send(f"Character or corporation `{args}` could not be found.")
+        args_concatenated = " ".join(args)
+        await ctx.send(f"Args `{args_concatenated}` could not be parsed.")
     except Exception as e:
         logger.error(f"Error in revoke command: {e}", exc_info=True)
         await ctx.send("An error occurred while trying to revoke access.")

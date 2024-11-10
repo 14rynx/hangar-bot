@@ -18,8 +18,8 @@ async def lookup(preston, string, return_type):
     except ValueError:
         try:
             result = preston.post_op(
-                'post_universe_names',
-                path_data=None,
+                'post_universe_ids',
+                path_data={},
                 post_data=[string]
             )
             return int(max(result[return_type], key=lambda x: x["id"])["id"])
