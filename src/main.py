@@ -282,13 +282,14 @@ async def revoke(ctx, *args):
 
         if len(args) == 0:
             user_characters = Character.select().where(Character.user == user)
-            user_characters.delete_instance()
-            for character in user_characters:
-                character.delete_instance()
+            if user_characters:
+                for character in user_characters:
+                    character.delete_instance()
 
             user_corp_characters = CorporationCharacter.select().where(CorporationCharacter.user == user)
-            for corp_character in user_corp_characters:
-                corp_character.delete_instance()
+            if user_corp_characters:
+                for corp_character in user_corp_characters:
+                    corp_character.delete_instance()
 
             user.delete_instance()
 
