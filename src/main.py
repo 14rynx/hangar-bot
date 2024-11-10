@@ -310,14 +310,17 @@ async def revoke(ctx, *args):
         else:
             character_id = await lookup(base_preston, " ".join(args), return_type="characters")
             character = user.characters.select().where(Character.character_id == character_id).first()
-            character.delete_instance()
-            await ctx.send(f"Successfully removed your character.")
+            if character:
+                character.delete_instance()
+                await ctx.send(f"Successfully removed your character.")
+            else:
+                await ctx.send("You have no character with that name linked.")
 
     except User.DoesNotExist:
         await ctx.send(f"You did not have any authorized characters in the first place.")
     except ValueError:
         args_concatenated = " ".join(args)
-        await ctx.send(f"Args `{args_concatenated}` could not be parsed.")
+        await ctx.send(f"Args `{args_concatenated}` could not be parsed or looked up.")
     except Exception as e:
         logger.error(f"Error in revoke command: {e}", exc_info=True)
         await ctx.send("An error occurred while trying to revoke access.")

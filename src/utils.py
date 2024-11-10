@@ -11,7 +11,7 @@ async def lookup(preston, string, return_type):
 
     Raises
     ------
-    ValueError, JSONDecodeError ...
+    ValueError if the name can't be resolved
     """
     try:
         return int(string)
