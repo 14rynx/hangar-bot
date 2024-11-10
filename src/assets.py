@@ -38,8 +38,16 @@ class Item:
         return any(["Slot" in x.location_flag for x in self.subordinates])
 
     @property
-    def is_assembled_container(self):
-        return self.location_flag == "Hangar" and self.location_type == "station"
+    def is_top_level_container(self):
+        # Top level container in hangar
+        if self.location_flag == "Hangar" and self.location_type == "station":
+            return True
+
+        # Container in Corp Hangar
+        if "CorpSAG" in self.location_flag:
+            return True
+
+        return False
 
     @property
     def item_counts(self):
@@ -115,7 +123,7 @@ class Assets:
                 self.root_items.append(item)
 
         # Build list with ships
-        self.items_of_interesst = [x for x in self.items if x.is_assembled_ship or x.is_assembled_container]
+        self.items_of_interesst = [x for x in self.items if x.is_assembled_ship or x.is_top_level_container]
 
         # Fetch the name of each container root item e.g. ship and container
         if self.is_corporation:
