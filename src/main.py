@@ -11,7 +11,8 @@ from preston import Preston
 
 from assets import Assets
 from callback_server import callback_server
-from models import initialize_database, User, Challenge
+from models import initialize_database, User, Challenge, CorporationCharacter, Character
+from src.utils import lookup
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -269,10 +270,56 @@ async def characters(ctx):
 
 
 @bot.command()
-async def revoke(ctx):
-    """Revokes ESI access from all your characters."""
+async def revoke(ctx, *args):
+    """Revokes ESI access from all your characters.
+    :args: Character that you want to revoke access to.
+    Use -c <corporation_name> to revoke corp access."""
+
     logger.info(f"{ctx.author.name} used !revoke")
-    await ctx.send("Currently not implemented!")
+
+    try:
+        user = User.get(User.user_id == str(ctx.author.id))
+
+        if not args:
+            user_characters = Character.select().where(Character.user == user)
+            user_characters.delete_instance()
+            for character in user_characters:
+                character.delete_instance()
+
+            user_corp_characters = CorporationCharacter.select().where(CorporationCharacter.user == user)
+            for corp_character in user_corp_characters:
+                corp_character.delete_instance()
+
+            user.delete_instance()
+
+            await ctx.send(f"Successfully revoked access to all your characters.")
+
+        if args[0] == '-c' and len(args) > 1:
+            corp_id = await lookup(base_preston, " ".join(args[1]), return_type="corporations")
+            corp_characters = user.corporation_characters.select().where(CorporationCharacter.corporation_id == corp_id)
+
+            for corp_character in corp_characters:
+                corp_character.delete_instance()
+
+            if len(corp_characters) == 0:
+                await ctx.send(f"You did not have any characters linking this corporation")
+            else:
+                await ctx.send(
+                    f"Successfully removed {len(corp_characters)} characters linked to you and this corporation.")
+
+        else:
+            character_id = await lookup(base_preston, " ".join(args[0]), return_type="characters")
+            character = user.characters.select().where(Character.character_id == character_id).first()
+            character.delete_instance()
+            await ctx.send(f"Successfully removed your character.")
+
+    except User.DoesNotExist:
+        await ctx.send(f"You did not have any authorized characters in the first place.")
+    except ValueError:
+        await ctx.send(f"Character or corporation `{args}` could not be found.")
+    except Exception as e:
+        logger.error(f"Error in revoke command: {e}", exc_info=True)
+        await ctx.send("An error occurred while trying to revoke access.")
 
 
 if __name__ == "__main__":
