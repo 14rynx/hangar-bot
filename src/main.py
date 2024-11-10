@@ -1,4 +1,5 @@
 import collections
+import functools
 import logging
 import os
 import secrets
@@ -12,7 +13,7 @@ from preston import Preston
 from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
-from utils import lookup
+from utils import lookup, send_large_message
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -69,20 +70,21 @@ async def get_author_assets(author_id: int):
                 yield a
 
 
-async def send_large_message(ctx, message, max_chars=2000):
-    while len(message) > 0:
-        if len(message) <= max_chars:
-            await ctx.send(message)
-            break
+def command_error_handler(func):
+    """Decorator for handling bot command logging and exceptions."""
 
-        last_newline_index = message.rfind('\n', 0, max_chars)
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        ctx = args[0]
+        logger.info(f"{ctx.author.name} used !{func.__name__}")
 
-        if last_newline_index == -1:
-            await ctx.send(message[:max_chars])
-            message = message[max_chars:]
-        else:
-            await ctx.send(message[:last_newline_index])
-            message = message[last_newline_index + 1:]
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in !{func.__name__} command: {e}", exc_info=True)
+            await ctx.send(f"An error occurred in !{func.__name__}.")
+
+    return wrapper
 
 
 @bot.event
@@ -91,9 +93,9 @@ async def on_ready():
 
 
 @bot.command()
+@command_error_handler
 async def state(ctx):
     """Returns the current state of all your ships in yaml format. (Useful for first setting things up)"""
-    logger.info(f"{ctx.author.name} used !state")
 
     await ctx.send("Fetching assets...")
     files_to_send = []
@@ -116,9 +118,9 @@ async def state(ctx):
 
 
 @bot.command()
+@command_error_handler
 async def check(ctx):
     """Returns a bullet point list of what ships are missing things."""
-    logger.info(f"{ctx.author.name} used !check")
 
     await ctx.send("Fetching assets...")
     has_characters = False
@@ -158,9 +160,9 @@ async def check(ctx):
 
 
 @bot.command()
+@command_error_handler
 async def buy(ctx):
     """Returns a multibuy of all the things missing in your ships."""
-    logger.info(f"{ctx.author.name} used !buy")
 
     await ctx.send("Fetching assets...")
     buy_list = collections.Counter()
@@ -186,9 +188,9 @@ async def buy(ctx):
 
 
 @bot.command()
+@command_error_handler
 async def set(ctx, attachment: discord.Attachment):
     """Sets your current requirement file to the one attached to this command."""
-    logger.info(f"{ctx.author.name} used !set")
 
     if attachment:
         response = requests.get(attachment.url, allow_redirects=True)
@@ -208,23 +210,24 @@ async def set(ctx, attachment: discord.Attachment):
 
 
 @bot.command()
+@command_error_handler
 async def get(ctx):
     """Returns your current requirements."""
-    logger.info(f"{ctx.author.name} used !get")
 
     user = User.get_or_none(User.user_id == str(ctx.author.id))
     if user and user.requirements_file:
-        requirements = discord.File(fp=BytesIO(user.requirements_file.encode('utf-8')), filename="requirements.yaml")
+        requirements = discord.File(fp=BytesIO(user.requirements_file.encode('utf-8')),
+                                    filename="requirements.yaml")
         await ctx.send("Here is your current requirement file.", file=requirements)
     else:
         await ctx.send("You don't have a requirements file set.")
 
 
 @bot.command()
+@command_error_handler
 async def auth(ctx, args):
     """Sends you an authorization link for a character.
     :args: -c: authorize for your corporation"""
-    logger.info(f"{ctx.author.name} used !auth")
 
     secret_state = secrets.token_urlsafe(60)
 
@@ -243,9 +246,9 @@ async def auth(ctx, args):
 
 
 @bot.command()
+@command_error_handler
 async def characters(ctx):
     """Displays your currently authorized characters."""
-    logger.info(f"{ctx.author.name} used !characters")
 
     character_names = []
     user = User.get_or_none(User.user_id == str(ctx.author.id))
@@ -270,12 +273,11 @@ async def characters(ctx):
 
 
 @bot.command()
+@command_error_handler
 async def revoke(ctx, *args):
     """Revokes ESI access from all your characters.
     :args: Character that you want to revoke access to.
     Use -c <corporation_name> to revoke corp access."""
-
-    logger.info(f"{ctx.author.name} used !revoke")
 
     try:
         user = User.get(User.user_id == str(ctx.author.id))
@@ -322,9 +324,6 @@ async def revoke(ctx, *args):
     except ValueError:
         args_concatenated = " ".join(args)
         await ctx.send(f"Args `{args_concatenated}` could not be parsed or looked up.")
-    except Exception as e:
-        logger.error(f"Error in revoke command: {e}", exc_info=True)
-        await ctx.send("An error occurred while trying to revoke access.")
 
 
 if __name__ == "__main__":

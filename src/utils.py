@@ -25,3 +25,19 @@ async def lookup(preston, string, return_type):
             return int(max(result[return_type], key=lambda x: x["id"])["id"])
         except (ValueError, KeyError):
             raise ValueError("Could not parse that character!")
+
+
+async def send_large_message(ctx, message, max_chars=2000):
+    while len(message) > 0:
+        if len(message) <= max_chars:
+            await ctx.send(message)
+            break
+
+        last_newline_index = message.rfind('\n', 0, max_chars)
+
+        if last_newline_index == -1:
+            await ctx.send(message[:max_chars])
+            message = message[max_chars:]
+        else:
+            await ctx.send(message[:last_newline_index])
+            message = message[last_newline_index + 1:]
