@@ -221,9 +221,9 @@ async def get(ctx):
 
 
 @bot.command()
-async def auth(ctx, corporation=False):
+async def auth(ctx, args):
     """Sends you an authorization link for a character.
-    :corporation: Set true if you want to authorize for your corporation"""
+    :args: -c: authorize for your corporation"""
     logger.info(f"{ctx.author.name} used !auth")
 
     secret_state = secrets.token_urlsafe(60)
@@ -232,7 +232,7 @@ async def auth(ctx, corporation=False):
     Challenge.delete().where(Challenge.user == user).execute()
     Challenge.create(user=user, state=secret_state)
 
-    if corporation:
+    if "-c" in args:
         full_link = f"{corp_base_preston.get_authorize_url()}&state={secret_state}"
         await ctx.author.send(
             f"Use this [authentication link]({full_link}) to authorize a character in your corporation "
