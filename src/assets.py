@@ -1,5 +1,4 @@
 import asyncio
-import time
 from collections import Counter
 
 import yaml
@@ -41,7 +40,7 @@ class Item:
     @property
     def is_top_level_container(self):
         # Top level container in hangar
-        if self.location_flag == "Hangar" and self.location_type == "station":
+        if self.location_flag == "Hangar" and self.location_type == "station" and len(self.subordinates) > 0:
             return True
 
         # Container in Corp Hangar
