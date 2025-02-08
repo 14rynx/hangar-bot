@@ -1,0 +1,1 @@
+This file only exists so the /data folder can be commited to git.
