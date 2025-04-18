@@ -85,7 +85,7 @@ async def on_ready():
 @bot.tree.command(name="state", description="Returns current ship state in YAML format.")
 @command_error_handler
 async def state(interaction: Interaction):
-    await interaction.response.send_message("Fetching assets...", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
     files_to_send = []
 
     async for assets in get_author_assets(interaction.user.id):
@@ -103,7 +103,7 @@ async def state(interaction: Interaction):
 @bot.tree.command(name="check", description="Returns list of ships missing required items.")
 @command_error_handler
 async def check(interaction: Interaction):
-    await interaction.response.send_message("Fetching assets...", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
     user = User.get_or_none(User.user_id == str(interaction.user.id))
 
@@ -156,7 +156,7 @@ async def check(interaction: Interaction):
 @bot.tree.command(name="buy", description="Returns a multibuy of missing items in your ships.")
 @command_error_handler
 async def buy(interaction: Interaction):
-    await interaction.response.send_message("Fetching assets...", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
     buy_list = collections.Counter()
     has_characters = False
 
