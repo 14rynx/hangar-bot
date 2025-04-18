@@ -1,5 +1,5 @@
 requests
 Pyyaml
-preston==4.6.0
+preston
 discord
 peewee
