@@ -1,19 +1,20 @@
 import collections
-import functools
 import logging
 import os
 import secrets
 from io import BytesIO, StringIO
+from typing import Literal
 
 import discord
 import requests
+from discord import Interaction, app_commands
 from discord.ext import commands
 from preston import Preston
 
 from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
-from utils import lookup, send_large_message
+from utils import lookup, with_refresh, command_error_handler
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -46,15 +47,8 @@ intent.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intent)
 
 
-def with_refresh(preston_instance, refresh_token: str):
-    new_kwargs = dict(preston_instance._kwargs)
-    new_kwargs["refresh_token"] = refresh_token
-    new_kwargs["access_token"] = None
-    return Preston(**new_kwargs)
-
-
-async def get_author_assets(author_id: int):
-    user = User.get_or_none(User.user_id == str(author_id))
+async def get_author_assets(author_id: str):
+    user = User.get_or_none(User.user_id == author_id)
     if user:
         for character in user.characters:
             a = Assets(with_refresh(base_preston, character.token))
@@ -70,24 +64,6 @@ async def get_author_assets(author_id: int):
             else:
                 yield a
 
-
-def command_error_handler(func):
-    """Decorator for handling bot command logging and exceptions."""
-
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        ctx = args[0]
-        logger.info(f"{ctx.author.name} used !{func.__name__}")
-
-        try:
-            return await func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Error in !{func.__name__} command: {e}", exc_info=True)
-            await ctx.send(f"An error occurred in !{func.__name__}.")
-
-    return wrapper
-
-
 def update_requirements(user):
     if user.update_url is not None:
         response = requests.get(user.update_url, allow_redirects=True)
@@ -97,234 +73,296 @@ def update_requirements(user):
 
 @bot.event
 async def on_ready():
+    logger.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"Synced {len(synced)} slash commands.")
+    except Exception as e:
+        logger.error(f"Failed to sync commands: {e}", exc_info=True)
     callback_server.start(base_preston)
 
 
-@bot.command()
+@bot.tree.command(name="state", description="Returns current ship state in YAML format.")
 @command_error_handler
-async def state(ctx):
-    """Returns the current state of all your ships in yaml format. (Useful for first setting things up)"""
-
-    await ctx.send("Fetching assets...")
+async def state(interaction: Interaction):
+    await interaction.response.send_message("Fetching assets...", ephemeral=True)
     files_to_send = []
 
-    async for assets in get_author_assets(ctx.author.id):
-        if assets.is_corporation:
-            filename = f"{assets.corporation_name}.yaml"
-        else:
-            filename = f"{assets.character_name}.yaml"
-
+    async for assets in get_author_assets(interaction.user.id):
+        filename = f"{assets.corporation_name if assets.is_corporation else assets.character_name}.yaml"
         yaml_text = assets.save_requirement()
-        discord_file = discord.File(StringIO(yaml_text), filename=filename)
-
-        files_to_send.append(discord_file)
+        file = discord.File(StringIO(yaml_text), filename=filename)
+        files_to_send.append(file)
 
     if files_to_send:
-        await ctx.send("Here are your current ship states.", files=files_to_send)
+        await interaction.followup.send("Here are your current ship states.", files=files_to_send, ephemeral=True)
     else:
-        await ctx.send("You have no authorized characters!")
+        await interaction.followup.send("You have no authorized characters!", ephemeral=True)
 
 
-@bot.command()
+@bot.tree.command(name="check", description="Returns list of ships missing required items.")
 @command_error_handler
-async def check(ctx):
-    """Returns a bullet point list of what ships are missing things."""
+async def check(interaction: Interaction):
+    await interaction.response.send_message("Fetching assets...", ephemeral=True)
 
-    await ctx.send("Fetching assets...")
+    user = User.get_or_none(User.user_id == str(interaction.user.id))
 
-    user = User.get_or_none(User.user_id == str(ctx.author.id))
     if user is None:
-        await ctx.send("You are not a registered user!")
+        await interaction.response.send_message("You are not a registered user!")
         return
 
     update_requirements(user)
 
     if user.requirements_file is None:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
+        await interaction.response.send_message("You have not set a requirements file, use the !set command and upload one!")
         return
 
     has_characters = False
     has_errors = False
     message = ""
-    async for assets in get_author_assets(ctx.author.id):
+
+    async for assets in get_author_assets(str(interaction.user.id)):
         has_characters = True
-        if assets.is_corporation:
-            name = f"\n## {assets.corporation_name}:\n"
+        name = f"\n## {assets.corporation_name if assets.is_corporation else assets.character_name}:\n"
+        user = User.get_or_none(User.user_id == str(interaction.user.id))
+
+        if user and user.requirements_file:
+            for ship_error_message in assets.check_requirement(user.requirements_file):
+                has_errors = True
+                if len(message) + len(ship_error_message) + len(name) > 1990:
+                    await interaction.followup.send(message)
+                    message = ""
+                if name:
+                    message += name
+                    name = ""
+                message += f"{ship_error_message}\n"
         else:
-            name = f"\n## {assets.character_name}\n"
-
-        for ship_error_message in assets.check_requirement(user.requirements_file):
-            has_errors = True
-
-            if len(message) + len(ship_error_message) + len(name) > 1990:
-                await ctx.send(message)
-                message = ""
-
-            if len(name) > 0:
-                message += name
-                name = ""
-
-            message += f"{ship_error_message}\n"
+            await interaction.followup.send(
+                "You have not set a requirements file. Use `/set` and upload one!", ephemeral=True
+            )
 
     if not has_characters:
-        await ctx.send("You have no authorized characters!")
+        await  interaction.followup.send("You have no authorized characters!", ephemeral=True)
         return
 
+
     if has_errors:
-        await ctx.send(message)
+        await interaction.followup.send(message, ephemeral=True)
     else:
-        await ctx.send("**No State Errors found!**")
+        await interaction.followup.send("**No State Errors found!**", ephemeral=True)
 
 
-@bot.command()
+
+@bot.tree.command(name="buy", description="Returns a multibuy of missing items in your ships.")
 @command_error_handler
-async def buy(ctx):
-    """Returns a multibuy of all the things missing in your ships."""
+async def buy(interaction: Interaction):
+    await interaction.response.send_message("Fetching assets...", ephemeral=True)
+    buy_list = collections.Counter()
+    has_characters = False
 
-    await ctx.send("Fetching assets...")
-
-    user = User.get_or_none(User.user_id == str(ctx.author.id))
+    user = User.get_or_none(User.user_id == str(interaction.user.id))
     if user is None:
-        await ctx.send("You are not a registered user!")
+        await interaction.followup.send("You are not a registered user!")
         return
 
     update_requirements(user)
 
     if user.requirements_file is None:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
+        await interaction.followup.send("You have not set a requirements file, use the !set command and upload one!")
         return
 
-    has_characters = False
-    buy_list = collections.Counter()
-    async for assets in get_author_assets(ctx.author.id):
+    async for assets in get_author_assets(interaction.user.id):
         has_characters = True
-        buy_list = assets.get_buy_list(user.requirements_file, buy_list=buy_list)
+        user = User.get_or_none(User.user_id == str(interaction.user.id))
+        if user and user.requirements_file:
+            buy_list = assets.get_buy_list(user.requirements_file, buy_list=buy_list)
+        else:
+            await interaction.followup.send(
+                "You have not set a requirements file. Use `/set` and upload one!", ephemeral=True
+            )
 
     if not has_characters:
-        await ctx.send("You have no authorized characters!")
+        await interaction.followup.send("You have no authorized characters!", ephemeral=True)
         return
 
-    buy_list_body = "\n".join([f"{item} {amount}" for item, amount in buy_list.items()])
-
+    buy_list_body = "\n".join(f"{item} {amount}" for item, amount in buy_list.items())
+    
     if buy_list_body:
-        await send_large_message(ctx, f"**Buy List:**\n```{buy_list_body}```")
+        await interaction.followup.send(f"**Buy List:**\n```{buy_list_body}```", ephemeral=True)
     else:
-        await ctx.send("**Nothing to buy!**")
+        await interaction.followup.send(
+            "**Nothing to buy!**", ephemeral=True
+        )
 
 
-@bot.command()
+@bot.tree.command(name="set", description="Set your requirement file.")
+@app_commands.describe(attachment="Your requirements.yaml file")
 @command_error_handler
-async def set(ctx, attachment: discord.Attachment):
-    """Sets your current requirement file to the one attached to this command."""
+async def set(interaction: Interaction, attachment: discord.Attachment):
+    await interaction.response.defer(ephemeral=True)
 
     if not attachment:
-        await ctx.send("You forgot to attach a new requirement file!")
+        await interaction.followup.send("You forgot to attach a new requirement file!")
         return
 
-    response = requests.get(attachment.url, allow_redirects=True)
-    requirements_content = response.content.decode('utf-8')  # Decode the content to a string
-
-    user = User.get_or_none(user_id=str(ctx.author.id))
+    response = requests.get(attachment.url)
+    content = response.content.decode("utf-8")
+    user = User.get_or_none(user_id=str(interaction.user.id))
     if user is None:
-        await ctx.send("You currently have no linked characters, so having requirements makes no sense.")
+        await interaction.followup.send("You currently have no linked characters, so having requirements makes no sense.")
         return
 
     if user.update_url:
-        await ctx.send("Setting a requirements file doesn't make sense as you have an update-url. Unset that first.")
+        await interaction.followup.send("Setting a requirements file doesn't make sense as you have an update-url. Unset that first.")
         return
 
-    user.requirements_file = requirements_content
+    user.requirements_file = content
     user.save()
-    await ctx.send("Set new requirements file!")
+    await interaction.followup.send("Set new requirements file!", ephemeral=True)
 
 
-@bot.command()
+@bot.tree.command(name="get", description="Download your current requirement file.")
 @command_error_handler
-async def get(ctx):
-    """Returns your current requirements."""
+async def get(interaction: Interaction):
+    user = User.get_or_none(User.user_id == str(interaction.user.id))
 
-    user = User.get_or_none(User.user_id == str(ctx.author.id))
     if user is None:
-        await ctx.send("You are not a registered user!")
+        await interaction.response.send_message("You are not a registered user!")
         return
 
     update_requirements(user)
 
     if user.requirements_file is None:
-        await ctx.send("You have not set a requirements file, use the !set command and upload one!")
+        await interaction.response.send_message("You have not set a requirements file, use the !set command and upload one!")
         return
 
     requirements = discord.File(
         fp=BytesIO(user.requirements_file.encode('utf-8')),
         filename="requirements.yaml"
     )
+    await interaction.response.send_message("Here is your current requirement file.", file=requirements, ephemeral=True)
 
-    await ctx.send("Here is your current requirement file.", file=requirements)
 
-
-@bot.command()
+@bot.tree.command(name="auth", description="Sends you an ESI authorization link.")
+@app_commands.describe(corporation="Authorize a character for your corporation instead of a personal one.")
 @command_error_handler
-async def auth(ctx, args):
-    """Sends you an authorization link for a character.
-    :args: -c: authorize for your corporation"""
-
+async def auth(interaction: Interaction, corporation: bool = False):
     secret_state = secrets.token_urlsafe(60)
 
-    user, created = User.get_or_create(user_id=str(ctx.author.id))
+    user, created = User.get_or_create(user_id=str(interaction.user.id))
     Challenge.delete().where(Challenge.user == user).execute()
     Challenge.create(user=user, state=secret_state)
 
-    if "-c" in args:
-        full_link = f"{corp_base_preston.get_authorize_url()}&state={secret_state}"
-        await ctx.author.send(
-            f"Use this [authentication link]({full_link}) to authorize a character in your corporation "
-            f"with the required role (Accountant).")
+    if corporation:
+        url = f"{corp_base_preston.get_authorize_url()}&state={secret_state}"
+        await interaction.response.send_message(
+            f"Use this [authentication link]({url}) to authorize a character in your corporation (must have the Accountant role).",
+            ephemeral=True
+        )
     else:
-        full_link = f"{base_preston.get_authorize_url()}&state={secret_state}"
-        await ctx.author.send(f"Use this [authentication link]({full_link}) to authorize your characters.")
+        url = f"{base_preston.get_authorize_url()}&state={secret_state}"
+        await interaction.response.send_message(
+            f"Use this [authentication link]({url}) to authorize your personal characters.", ephemeral=True
+        )
 
 
-@bot.command()
+@bot.tree.command(name="characters", description="Displays your currently authorized characters.")
 @command_error_handler
-async def characters(ctx):
-    """Displays your currently authorized characters."""
-
+async def characters(interaction: Interaction):
     character_names = []
-    user = User.get_or_none(User.user_id == str(ctx.author.id))
-    if user is None:
-        await ctx.send("You are not a registered user!")
-        return
+    user = User.get_or_none(User.user_id == str(interaction.user.id))
 
+    if user is None:
+        await interaction.response.send_message("You are not a registered user!")
+        return
+        
     for character in user.characters:
         char_auth = with_refresh(base_preston, character.token)
-        character_name = char_auth.whoami()['CharacterName']
-        character_names.append(f"- {character_name}")
+        name = char_auth.whoami()['CharacterName']
+        character_names.append(f"- {name}")
 
-    for corporation_character in user.corporation_characters:
-        char_auth = with_refresh(corp_base_preston, corporation_character.token)
-        character_name = char_auth.whoami()['CharacterName']
-        corporation_name = char_auth.get_op("get_corporations_corporation_id",
-                                            corporation_id=corporation_character.corporation_id).get("name")
-        character_names.append(f"- {corporation_name} (via {character_name})")
+    for corp_character in user.corporation_characters:
+        char_auth = with_refresh(corp_base_preston, corp_character.token)
+        char_name = char_auth.whoami()['CharacterName']
+        corp_name = char_auth.get_op("get_corporations_corporation_id",
+                                     corporation_id=corp_character.corporation_id).get("name")
+        character_names.append(f"- {corp_name} (via {char_name})")
 
     if character_names:
-        character_names_body = "\n".join(character_names)
-        await ctx.send(f"You have the following character(s) authenticated:\n{character_names_body}")
+        await interaction.response.send_message(
+            f"You have the following character(s) authenticated:\n" + "\n".join(character_names), ephemeral=True
+        )
     else:
-        await ctx.send("You have no authorized characters!")
+        await interaction.response.send_message("You have no authorized characters.", ephemeral=True)
 
 
-@bot.command()
+@bot.tree.command(name="revoke", description="Revoke ESI access to characters or corporations.")
+@app_commands.describe(
+    entity_type="Type of entity to revoke, character hangar, corporation hangar or all hangars.",
+    entity_name="Name of the character or corporation or empty to remove all"
+)
 @command_error_handler
-async def revoke(ctx, *args):
-    """Revokes ESI access from all your characters.
-    :args: Character that you want to revoke access to.
-    Use -c <corporation_name> to revoke corp access."""
-
+async def revoke(
+        interaction: Interaction,
+        entity_type: Literal["character", "corporation", "all"],
+        entity_name: str | None = None
+):
     try:
-        user = User.get(User.user_id == str(ctx.author.id))
+        user = User.get(User.user_id == str(interaction.user.id))
 
-        if len(args) == 0:
+        if entity_type == "character":
+            if entity_name is None:
+                user_characters = Character.select().where(Character.user == user)
+                if user_characters:
+                    for character in user_characters:
+                        character.delete_instance()
+                if len(user_characters) == 0:
+                    await interaction.response.send_message(
+                        f"You did not have any characters linked with their personal hangars"
+                    )
+                else:
+                    await interaction.response.send_message(
+                        f"Successfully removed {len(user_characters)} characters linked with their personal hangars."
+                    )
+
+            else:
+                character_id = await lookup(base_preston, entity_name, return_type="characters")
+                character = user.characters.select().where(Character.character_id == character_id).first()
+                if character:
+                    character.delete_instance()
+                    await interaction.response.send_message(f"Successfully removed {entity_name}.")
+                else:
+                    await interaction.response.send_message(f"You have no character linked named {entity_name}.")
+
+        elif entity_type == "corporation":
+            if entity_name is None:
+                user_corp_characters = CorporationCharacter.select().where(CorporationCharacter.user == user)
+                if user_corp_characters:
+                    for corp_character in user_corp_characters:
+                        corp_character.delete_instance()
+
+                await interaction.response.send_message(
+                    f"Successfully revoked access to all your character corporation scopes."
+                )
+
+            else:
+                corp_id = await lookup(base_preston, entity_name, return_type="corporations")
+                corp_characters = user.corporation_characters.select().where(
+                    CorporationCharacter.corporation_id == corp_id)
+
+                for corp_character in corp_characters:
+                    corp_character.delete_instance()
+
+                if len(corp_characters) == 0:
+                    await interaction.response.send_message(
+                        f"You did not have any characters linking corporation {entity_name}."
+                    )
+                else:
+                    await interaction.response.send_message(
+                        f"Successfully removed {len(corp_characters)} characters linked corporation {entity_name}."
+                    )
+
+        else:
             user_characters = Character.select().where(Character.user == user)
             if user_characters:
                 for character in user_characters:
@@ -336,50 +374,27 @@ async def revoke(ctx, *args):
                     corp_character.delete_instance()
 
             user.delete_instance()
+            await interaction.response.send_message("Successfully revoked access to all your characters.")
 
-            await ctx.send(f"Successfully revoked access to all your characters.")
-
-        elif args[0] == '-c' and len(args) > 1:
-            corp_id = await lookup(base_preston, " ".join(args[1:]), return_type="corporations")
-            corp_characters = user.corporation_characters.select().where(CorporationCharacter.corporation_id == corp_id)
-
-            for corp_character in corp_characters:
-                corp_character.delete_instance()
-
-            if len(corp_characters) == 0:
-                await ctx.send(f"You did not have any characters linking this corporation")
-            else:
-                await ctx.send(
-                    f"Successfully removed {len(corp_characters)} characters linked to you and this corporation.")
-
-        else:
-            character_id = await lookup(base_preston, " ".join(args), return_type="characters")
-            character = user.characters.select().where(Character.character_id == character_id).first()
-            if character:
-                character.delete_instance()
-                await ctx.send(f"Successfully removed your character.")
-            else:
-                await ctx.send("You have no character with that name linked.")
 
     except User.DoesNotExist:
-        await ctx.send(f"You did not have any authorized characters in the first place.")
+        await  interaction.response.send_message(f"You did not have any authorized characters in the first place.")
     except ValueError:
-        args_concatenated = " ".join(args)
-        await ctx.send(f"Args `{args_concatenated}` could not be parsed or looked up.")
+        await  interaction.response.send_message(f"Args `{entity_name}` could not be parsed or looked up.")
 
 
-@bot.command()
+@bot.tree.command(name="url", description="Add an URL to get requirements from.")
 @command_error_handler
-async def url(ctx, url=None):
+async def url(interaction: Interaction, url: str | None = None):
     """Set an url from which to update your requirements file before other actions."""
     # Upsert the user's requirements file into the database
-    user = User.get_or_none(user_id=str(ctx.author.id))
+    user = User.get_or_none(user_id=str(interaction.user.id))
     if user:
         user.update_url = url
         user.save()
-        await ctx.send("Set new update url!")
+        await interaction.response.send_message("Set new update url!")
     else:
-        await ctx.send("You currently have no linked characters, so having an update url makes no sense.")
+        await interaction.response.send_message("You currently have no linked characters, so having an update url makes no sense.")
 
 
 if __name__ == "__main__":
