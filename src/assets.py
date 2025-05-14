@@ -2,6 +2,7 @@ import asyncio
 from collections import Counter
 
 import yaml
+from requests import HTTPError
 
 
 class Item:
@@ -71,9 +72,9 @@ class Assets:
 
         # Set up initial info
         character_data = preston.whoami()
-        self.character_id = character_data["CharacterID"]
-        self.character_name = character_data["CharacterName"]
-        self.is_corporation = character_data["Scopes"] == "esi-assets.read_corporation_assets.v1"
+        self.character_id = character_data["character_id"]
+        self.character_name = character_data["character_name"]
+        self.is_corporation = character_data["scopes"] == "esi-assets.read_corporation_assets.v1"
 
         if self.is_corporation:
             self.corporation_id = preston.get_op(
@@ -99,16 +100,15 @@ class Assets:
         # Fetch all available assets
         page = 1
         while True:
-            if self.is_corporation:
-                result = self.preston.get_op('get_corporations_corporation_id_assets', corporation_id=self.corporation_id,
-                                        page=page)
-            else:
-                result = self.preston.get_op('get_characters_character_id_assets', character_id=self.character_id, page=page)
-            if "error" in result:
-                if "Requested page does not exist!" in result["error"]:
+            try:
+                if self.is_corporation:
+                    result = self.preston.get_op('get_corporations_corporation_id_assets', corporation_id=self.corporation_id,
+                                            page=page)
+                else:
+                    result = self.preston.get_op('get_characters_character_id_assets', character_id=self.character_id, page=page)
+            except HTTPError as exp:
+                if exp.response.status_code == 404:
                     break
-                elif result["error"] == "Character does not have required role(s)":
-                    raise AssertionError(result["error"])
             else:
                 self.items.extend([Item(**x) for x in result])
                 page += 1

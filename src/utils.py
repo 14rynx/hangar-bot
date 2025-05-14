@@ -35,13 +35,6 @@ async def lookup(preston, string, return_type):
             raise ValueError("Could not parse that character!")
 
 
-def with_refresh(preston_instance, refresh_token: str):
-    new_kwargs = dict(preston_instance._kwargs)
-    new_kwargs["refresh_token"] = refresh_token
-    new_kwargs["access_token"] = None
-    return Preston(**new_kwargs)
-
-
 def command_error_handler(func):
     """Decorator for handling bot command logging and exceptions."""
 

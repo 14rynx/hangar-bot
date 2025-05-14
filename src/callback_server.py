@@ -41,9 +41,9 @@ async def callback_server(preston: Preston):
 
         # Get character data
         character_data = auth.whoami()
-        character_id = character_data["CharacterID"]
-        character_name = character_data["CharacterName"]
-        scopes = character_data["Scopes"]
+        character_id = character_data["character_id"]
+        character_name = character_data["character_name"]
+        scopes = character_data["scopes"]
 
         # Create / Update user and store refresh_token
         user, user_created = User.get_or_create(user_id=challenge.user.user_id)

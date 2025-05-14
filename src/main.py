@@ -14,7 +14,7 @@ from preston import Preston
 from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
-from utils import lookup, with_refresh, command_error_handler
+from utils import lookup, command_error_handler
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -23,6 +23,13 @@ logger.setLevel(logging.INFO)
 # Initialize the database
 initialize_database()
 
+def base_token_callback(preston):
+    character_id = preston.whoami()["character_id"]
+    character = Character.get(character_id=character_id)
+    character.token = preston.refresh_token
+    character.save()
+
+
 # Setup ESI connection
 base_preston = Preston(
     user_agent="Hangar organizing discord bot by larynx.austrene@gmail.com",
@@ -30,7 +37,15 @@ base_preston = Preston(
     client_secret=os.environ["CCP_SECRET_KEY"],
     callback_url=os.environ["CCP_REDIRECT_URI"],
     scope="esi-assets.read_assets.v1",
+    refresh_token_callback=base_token_callback,
+    timeout=6,
 )
+
+def corporation_token_callback(preston):
+    character_id = preston.whoami()["character_id"]
+    character = CorporationCharacter.get(character_id=character_id)
+    character.token = preston.refresh_token
+    character.save()
 
 corp_base_preston = Preston(
     user_agent="Hangar organizing discord bot by larynx.austrene@gmail.com",
@@ -38,6 +53,8 @@ corp_base_preston = Preston(
     client_secret=os.environ["CCP_SECRET_KEY"],
     callback_url=os.environ["CCP_REDIRECT_URI"],
     scope="esi-assets.read_corporation_assets.v1",
+    refresh_token_callback=corporation_token_callback,
+    timeout=6,
 )
 
 # Setup Discord
@@ -51,13 +68,13 @@ async def get_author_assets(author_id: str):
     user = User.get_or_none(User.user_id == author_id)
     if user:
         for character in user.characters:
-            a = Assets(with_refresh(base_preston, character.token))
+            a = Assets(base_preston.authenticate_from_token(character.token))
             await a.fetch()
             yield a
 
         for corporation_character in user.corporation_characters:
             try:
-                a = Assets(with_refresh(corp_base_preston, corporation_character.token))
+                a = Assets(corp_base_preston.authenticate_from_token( corporation_character.token))
                 await a.fetch()
             except AssertionError:
                 corporation_character.delete_instance()
@@ -254,13 +271,13 @@ async def auth(interaction: Interaction, corporation: bool = False):
     Challenge.create(user=user, state=secret_state)
 
     if corporation:
-        url = f"{corp_base_preston.get_authorize_url()}&state={secret_state}"
+        url = f"{corp_base_preston.get_authorize_url(secret_state)}"
         await interaction.response.send_message(
             f"Use this [authentication link]({url}) to authorize a character in your corporation (must have the Accountant role).",
             ephemeral=True
         )
     else:
-        url = f"{base_preston.get_authorize_url()}&state={secret_state}"
+        url = f"{base_preston.get_authorize_url(secret_state)}"
         await interaction.response.send_message(
             f"Use this [authentication link]({url}) to authorize your personal characters.", ephemeral=True
         )
@@ -277,13 +294,13 @@ async def characters(interaction: Interaction):
         return
         
     for character in user.characters:
-        char_auth = with_refresh(base_preston, character.token)
-        name = char_auth.whoami()['CharacterName']
+        char_auth = base_preston.authenticate_from_token(character.token)
+        name = char_auth.whoami()['character_name']
         character_names.append(f"- {name}")
 
     for corp_character in user.corporation_characters:
-        char_auth = with_refresh(corp_base_preston, corp_character.token)
-        char_name = char_auth.whoami()['CharacterName']
+        char_auth = corp_base_preston.authenticate_from_token(corp_character.token)
+        char_name = char_auth.whoami()['character_name']
         corp_name = char_auth.get_op("get_corporations_corporation_id",
                                      corporation_id=corp_character.corporation_id).get("name")
         character_names.append(f"- {corp_name} (via {char_name})")
