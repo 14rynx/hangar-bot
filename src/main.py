@@ -58,10 +58,10 @@ corp_base_preston = Preston(
 )
 
 # Setup Discord
-intent = discord.Intents.default()
-intent.messages = True
-intent.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intent)
+intents = discord.Intents.default()
+intents.messages = True
+intents.message_content = True
+bot = commands.Bot(command_prefix="/", intents=intents)
 
 
 async def get_author_assets(author_id: str):
