@@ -263,7 +263,7 @@ async def revoke(
 # Extra Commands for AT Hangar-Checking
 
 async def get_all_assets():
-    for user in User.get():
+    for user in User.select():
         for character in user.characters:
             a = Assets(base_preston.authenticate_from_token(character.token))
             await a.fetch()
