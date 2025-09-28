@@ -15,7 +15,7 @@ from preston import Preston
 from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
-from utils import lookup, command_error_handler
+from utils import lookup, command_error_handler, send_large_followup
 from sheet import fetch_requirements
 
 # Configure the logger
@@ -290,7 +290,7 @@ async def satisfaction(interaction: Interaction):
 
     await interaction.response.defer()
 
-    await interaction.followup.send("Fetching assets and requirements...")
+    await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
     comp_requirements = fetch_requirements()
     satisfaction_counts = collections.Counter()
@@ -317,7 +317,7 @@ async def satisfaction(interaction: Interaction):
     else:
         message = "No requirements provided!"
 
-    await interaction.followup.send(message)
+    await send_large_followup(interaction, message, ephemeral=True)
 
 
 @bot.tree.command(name="missing", description="Check what is missing for each requirement set to be satisfied one more time.")
@@ -330,7 +330,7 @@ async def missing(interaction: Interaction):
         return
 
     await interaction.response.defer()
-    await interaction.followup.send("Fetching assets and requirements...")
+    await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
     comp_requirements = fetch_requirements()
 
@@ -362,7 +362,7 @@ async def missing(interaction: Interaction):
                 message += f"{item} x{count}\n"
             message += "```"
 
-            await interaction.followup.send(message)
+            await send_large_followup(interaction, message, ephemeral=True)
 
     if not comp_requirements:
         await interaction.followup.send("No requirements provided.")
@@ -378,7 +378,7 @@ async def all(interaction: Interaction):
         return
 
     await interaction.response.defer()
-    await interaction.followup.send("Fetching assets and requirements...")
+    await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
     comp_requirements = fetch_requirements()
     all_missing_items = collections.Counter()
@@ -413,7 +413,7 @@ async def all(interaction: Interaction):
             message += f"{item} x{count}\n"
         message += "```"
 
-        await interaction.followup.send(message)
+        await send_large_followup(interaction, message, ephemeral=True)
 
     if not comp_requirements:
         await interaction.followup.send("No requirements provided.")
