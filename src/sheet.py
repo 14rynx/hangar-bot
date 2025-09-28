@@ -1,0 +1,64 @@
+from google.oauth2 import service_account
+from googleapiclient import discovery
+
+def lines_to_counter(lines):
+    items = Counter()
+    for item in lines:
+        if "[" in item or item == "":
+            continue
+        if ', ' in item:
+            item = item.split(", ")[0]
+        if ' x' in item:
+            name, count = item.rsplit(" x", 1)
+            items[name.strip()] += int(count)
+        else:
+            items[item.strip()] += 1
+    return items
+
+
+def eft_to_counter(eft):
+    eft = eft.replace('\r', '')
+    sections = eft.strip().split("\n\n\n")
+    title_item = sections[0].split(",")[0].strip("[]")
+    ship_counter = Counter()
+    ship_counter[title_item] += 1
+    all_counter = lines_to_counter(sections[0].splitlines()) + lines_to_counter(
+        "\n".join(sections[1:]).splitlines()) + ship_counter
+
+    # Ignore FLAG fitting
+    if "FLAG" in eft:
+        return ship_counter, Counter()
+
+    return ship_counter, all_counter
+
+
+def fetch_requirements():
+    sheet_service = get_sheet_service()
+    result = sheet_service.spreadsheets().values().get(spreadsheetId=os.environ["SPREADSHEET_ID"],
+                                                       range=os.environ["RANGE"]).execute()
+    inputs = result.get('values', [])
+
+    comp_requirements = []
+    all_counter = Counter()
+    ship_counter = Counter()
+    for row in inputs:
+        eft = row[0] if row else ""
+        if "Fit" in eft:
+            if all_counter:
+                comp_requirements.append((ship_counter, all_counter))
+            all_counter = Counter()
+            ship_counter = Counter()
+        elif "[" in eft:
+            ship_local, all_local = eft_to_counter(eft)
+            ship_counter += ship_local
+            all_counter += all_local
+
+    return comp_requirements
+
+# Google Sheets setup
+def get_sheet_service():
+    scopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.file",
+              "https://www.googleapis.com/auth/spreadsheets"]
+    credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    service = discovery.build('sheets', 'v4', credentials=credentials)
+    return service

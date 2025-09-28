@@ -2,3 +2,5 @@
 __pychache__/
 data/
 .env
+secrets.json
+credentials.json

@@ -4,6 +4,7 @@ import os
 import secrets
 from io import BytesIO, StringIO
 from typing import Literal
+import copy
 
 import discord
 import requests
@@ -15,10 +16,14 @@ from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
 from utils import lookup, command_error_handler
+from sheet import fetch_requirements
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
 logger.setLevel(logging.INFO)
+
+# Figure out users for at
+allowed_users = list(map(int, map(lambda x: x.strip(), os.environ["AT_USERS"].split(","))))
 
 # Initialize the database
 initialize_database()
@@ -99,171 +104,15 @@ async def on_ready():
     callback_server.start(base_preston)
 
 
-@bot.tree.command(name="state", description="Returns current ship state in YAML format.")
-@command_error_handler
-async def state(interaction: Interaction):
-    await interaction.response.defer(ephemeral=True)
-    files_to_send = []
-
-    async for assets in get_author_assets(interaction.user.id):
-        filename = f"{assets.corporation_name if assets.is_corporation else assets.character_name}.yaml"
-        yaml_text = assets.save_requirement()
-        file = discord.File(StringIO(yaml_text), filename=filename)
-        files_to_send.append(file)
-
-    if files_to_send:
-        await interaction.followup.send("Here are your current ship states.", files=files_to_send, ephemeral=True)
-    else:
-        await interaction.followup.send("You have no authorized characters!", ephemeral=True)
-
-
-@bot.tree.command(name="check", description="Returns list of ships missing required items.")
-@command_error_handler
-async def check(interaction: Interaction):
-    await interaction.response.defer(ephemeral=True)
-
-    user = User.get_or_none(User.user_id == str(interaction.user.id))
-
-    if user is None:
-        await interaction.response.send_message("You are not a registered user!")
-        return
-
-    update_requirements(user)
-
-    if user.requirements_file is None:
-        await interaction.response.send_message("You have not set a requirements file, use the !set command and upload one!")
-        return
-
-    has_characters = False
-    has_errors = False
-    message = ""
-
-    async for assets in get_author_assets(str(interaction.user.id)):
-        has_characters = True
-        name = f"\n## {assets.corporation_name if assets.is_corporation else assets.character_name}:\n"
-        user = User.get_or_none(User.user_id == str(interaction.user.id))
-
-        if user and user.requirements_file:
-            for ship_error_message in assets.check_requirement(user.requirements_file):
-                has_errors = True
-                if len(message) + len(ship_error_message) + len(name) > 1990:
-                    await interaction.followup.send(message)
-                    message = ""
-                if name:
-                    message += name
-                    name = ""
-                message += f"{ship_error_message}\n"
-        else:
-            await interaction.followup.send(
-                "You have not set a requirements file. Use `/set` and upload one!", ephemeral=True
-            )
-
-    if not has_characters:
-        await  interaction.followup.send("You have no authorized characters!", ephemeral=True)
-        return
-
-
-    if has_errors:
-        await interaction.followup.send(message, ephemeral=True)
-    else:
-        await interaction.followup.send("**No State Errors found!**", ephemeral=True)
-
-
-
-@bot.tree.command(name="buy", description="Returns a multibuy of missing items in your ships.")
-@command_error_handler
-async def buy(interaction: Interaction):
-    await interaction.response.defer(ephemeral=True)
-    buy_list = collections.Counter()
-    has_characters = False
-
-    user = User.get_or_none(User.user_id == str(interaction.user.id))
-    if user is None:
-        await interaction.followup.send("You are not a registered user!")
-        return
-
-    update_requirements(user)
-
-    if user.requirements_file is None:
-        await interaction.followup.send("You have not set a requirements file, use the !set command and upload one!")
-        return
-
-    async for assets in get_author_assets(interaction.user.id):
-        has_characters = True
-        user = User.get_or_none(User.user_id == str(interaction.user.id))
-        if user and user.requirements_file:
-            buy_list = assets.get_buy_list(user.requirements_file, buy_list=buy_list)
-        else:
-            await interaction.followup.send(
-                "You have not set a requirements file. Use `/set` and upload one!", ephemeral=True
-            )
-
-    if not has_characters:
-        await interaction.followup.send("You have no authorized characters!", ephemeral=True)
-        return
-
-    buy_list_body = "\n".join(f"{item} {amount}" for item, amount in buy_list.items())
-    
-    if buy_list_body:
-        await interaction.followup.send(f"**Buy List:**\n```{buy_list_body}```", ephemeral=True)
-    else:
-        await interaction.followup.send(
-            "**Nothing to buy!**", ephemeral=True
-        )
-
-
-@bot.tree.command(name="set", description="Set your requirement file.")
-@app_commands.describe(attachment="Your requirements.yaml file")
-@command_error_handler
-async def set(interaction: Interaction, attachment: discord.Attachment):
-    await interaction.response.defer(ephemeral=True)
-
-    if not attachment:
-        await interaction.followup.send("You forgot to attach a new requirement file!")
-        return
-
-    response = requests.get(attachment.url)
-    content = response.content.decode("utf-8")
-    user = User.get_or_none(user_id=str(interaction.user.id))
-    if user is None:
-        await interaction.followup.send("You currently have no linked characters, so having requirements makes no sense.")
-        return
-
-    if user.update_url:
-        await interaction.followup.send("Setting a requirements file doesn't make sense as you have an update-url. Unset that first.")
-        return
-
-    user.requirements_file = content
-    user.save()
-    await interaction.followup.send("Set new requirements file!", ephemeral=True)
-
-
-@bot.tree.command(name="get", description="Download your current requirement file.")
-@command_error_handler
-async def get(interaction: Interaction):
-    user = User.get_or_none(User.user_id == str(interaction.user.id))
-
-    if user is None:
-        await interaction.response.send_message("You are not a registered user!")
-        return
-
-    update_requirements(user)
-
-    if user.requirements_file is None:
-        await interaction.response.send_message("You have not set a requirements file, use the !set command and upload one!")
-        return
-
-    requirements = discord.File(
-        fp=BytesIO(user.requirements_file.encode('utf-8')),
-        filename="requirements.yaml"
-    )
-    await interaction.response.send_message("Here is your current requirement file.", file=requirements, ephemeral=True)
-
-
 @bot.tree.command(name="auth", description="Sends you an ESI authorization link.")
 @app_commands.describe(corporation="Authorize a character for your corporation instead of a personal one.")
 @command_error_handler
 async def auth(interaction: Interaction, corporation: bool = False):
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
     secret_state = secrets.token_urlsafe(60)
 
     user, created = User.get_or_create(user_id=str(interaction.user.id))
@@ -286,6 +135,11 @@ async def auth(interaction: Interaction, corporation: bool = False):
 @bot.tree.command(name="characters", description="Displays your currently authorized characters.")
 @command_error_handler
 async def characters(interaction: Interaction):
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
     character_names = []
     user = User.get_or_none(User.user_id == str(interaction.user.id))
 
@@ -324,6 +178,11 @@ async def revoke(
         entity_type: Literal["character", "corporation", "all"],
         entity_name: str | None = None
 ):
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
     try:
         user = User.get(User.user_id == str(interaction.user.id))
 
@@ -400,18 +259,165 @@ async def revoke(
         await  interaction.response.send_message(f"Args `{entity_name}` could not be parsed or looked up.")
 
 
-@bot.tree.command(name="url", description="Add an URL to get requirements from.")
+###############################################################################
+# Extra Commands for AT Hangar-Checking
+
+async def get_all_assets():
+    for user in User.get():
+        for character in user.characters:
+            a = Assets(base_preston.authenticate_from_token(character.token))
+            await a.fetch()
+            yield a
+
+        for corporation_character in user.corporation_characters:
+            try:
+                a = Assets(corp_base_preston.authenticate_from_token( corporation_character.token))
+                await a.fetch()
+            except AssertionError:
+                corporation_character.delete_instance()
+            else:
+                yield a
+
+# Satisfaction command
+@bot.tree.command(name="satisfaction", description="Check how many times each requirement set is fully satisfied by your assets.")
 @command_error_handler
-async def url(interaction: Interaction, url: str | None = None):
-    """Set an url from which to update your requirements file before other actions."""
-    # Upsert the user's requirements file into the database
-    user = User.get_or_none(user_id=str(interaction.user.id))
-    if user:
-        user.update_url = url
-        user.save()
-        await interaction.response.send_message("Set new update url!")
+async def satisfaction(interaction: Interaction):
+    logger.info(f"{interaction.user.name} used /satisfaction")
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+
+    await interaction.followup.send("Fetching assets and requirements...")
+
+    comp_requirements = fetch_requirements()
+    satisfaction_counts = collections.Counter()
+
+    async for assets in get_all_assets():
+        user_items = assets.item_counts()
+
+        for ship_counter, item_counter in comp_requirements:
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+            comp_items = copy.copy(user_items)
+            satisfaction_counts[requirement_name] = 0
+
+            while True:
+                intersection = comp_items & item_counter
+                if intersection.total() != item_counter.total():
+                    break
+                comp_items -= item_counter
+                satisfaction_counts[requirement_name] += 1
+
+    if comp_requirements:
+        message = "**Satisfaction Counts:**\n"
+        for i, (requirement_name, count) in enumerate(satisfaction_counts.items()):
+            message += f"- Comp {i} x{count} (Ships: {requirement_name})\n"
     else:
-        await interaction.response.send_message("You currently have no linked characters, so having an update url makes no sense.")
+        message = "No requirements provided!"
+
+    await interaction.followup.send(message)
+
+
+@bot.tree.command(name="missing", description="Check what is missing for each requirement set to be satisfied one more time.")
+@command_error_handler
+async def missing(interaction: Interaction):
+    logger.info(f"{interaction.user.name} used /missing")
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    await interaction.followup.send("Fetching assets and requirements...")
+
+    comp_requirements = fetch_requirements()
+
+    async for assets in get_all_assets():
+        user_items = assets.item_counts()
+
+        for i, (ship_counter, item_counter) in enumerate(comp_requirements):
+            comp_items = copy.copy(user_items)
+            satisfaction_count = 0
+
+            while True:
+                intersection = comp_items & item_counter
+                if intersection.total() != item_counter.total():
+                    missing_items = item_counter - intersection
+                    break
+                comp_items -= item_counter
+                satisfaction_count += 1
+
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+
+            if satisfaction_count > 0:
+                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
+                message += f"To satisfy it one more time, you need:\n```"
+            else:
+                message = f"**Comp {i} is not satisfied yet (Ships: {requirement_name})**\n"
+                message += f"Missing the following items:\n```"
+
+            for item, count in missing_items.items():
+                message += f"{item} x{count}\n"
+            message += "```"
+
+            await interaction.followup.send(message)
+
+    if not comp_requirements:
+        await interaction.followup.send("No requirements provided.")
+
+
+@bot.tree.command(name="all", description="Check what is missing for each requirement set to be satisfied one more time.")
+@command_error_handler
+async def all(interaction: Interaction):
+    logger.info(f"{interaction.user.name} used /all")
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    await interaction.followup.send("Fetching assets and requirements...")
+
+    comp_requirements = fetch_requirements()
+    all_missing_items = collections.Counter()
+
+    async for assets in get_all_assets():
+        user_items = assets.item_counts()
+
+        for i, (ship_counter, item_counter) in enumerate(comp_requirements):
+            comp_items = copy.copy(user_items)
+            satisfaction_count = 0
+
+            while True:
+                intersection = comp_items & item_counter
+                if intersection.total() != item_counter.total():
+                    missing_items = item_counter - intersection
+                    break
+                comp_items -= item_counter
+                satisfaction_count += 1
+
+            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+
+            if satisfaction_count > 0:
+                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
+            else:
+                all_missing_items = all_missing_items | missing_items
+                message = f"**Comp {i} is not satisfied yet (Ships: {requirement_name})**\n"
+
+            await interaction.followup.send(message)
+
+        message = f"**Total missing items to run everything once**\n```"
+        for item, count in all_missing_items.items():
+            message += f"{item} x{count}\n"
+        message += "```"
+
+        await interaction.followup.send(message)
+
+    if not comp_requirements:
+        await interaction.followup.send("No requirements provided.")
+
 
 
 if __name__ == "__main__":

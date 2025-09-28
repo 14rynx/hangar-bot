@@ -3,3 +3,6 @@ Pyyaml
 preston @ git+https://github.com/14rynx/Preston@oauth_v2
 discord
 peewee
+google-api-python-client~=2.80.0
+google-auth-httplib2
+google-auth-oauthlib

@@ -204,3 +204,14 @@ class Assets:
                     buy_list += missing
 
         return buy_list
+
+    def item_counts(self):
+        """Returns the total item counts for all assets"""
+        counter = Counter()
+
+        # Count items from root items (items not part of other items)
+        for item in self.root_items:
+            counter += Counter({item.type_name: item.quantity})
+            counter += item.item_counts
+
+        return counter
