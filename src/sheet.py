@@ -1,5 +1,8 @@
 from google.oauth2 import service_account
 from googleapiclient import discovery
+from collections import Counter
+import os
+
 
 def lines_to_counter(lines):
     items = Counter()
