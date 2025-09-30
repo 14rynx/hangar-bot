@@ -56,7 +56,7 @@ def fetch_requirements():
             if all_counter:
                 comp_name =  ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
                 comp_requirements.append((comp_name, all_counter))
-                total_counter = max(all_counter, total_counter)
+                total_counter = all_counter | total_counter
             all_counter = Counter()
             ship_counter = Counter()
         elif "[" in eft:
