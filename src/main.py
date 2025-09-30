@@ -292,7 +292,6 @@ async def comps(interaction: Interaction, headers_only: bool = False):
         return
 
     await interaction.response.defer()
-    await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
     comp_requirements, total_requirements = fetch_requirements()
 
@@ -319,7 +318,6 @@ async def comps(interaction: Interaction, headers_only: bool = False):
             message = f"**Comp {i} is satisfied {satisfaction_count} times ({comp_name})**\n"
         else:
             message = f"**Comp {i} is not satisfied yet ({comp_name})**\n"
-            message += f"Missing the following items:\n```"
 
         if not headers_only:
             message += f"To satisfy it one more time, you need:\n```"
@@ -340,7 +338,6 @@ async def all(interaction: Interaction):
         return
 
     await interaction.response.defer()
-    await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
     _, total_requirements = fetch_requirements()
 
