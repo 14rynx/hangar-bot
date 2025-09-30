@@ -281,10 +281,11 @@ async def get_all_assets():
 
 @bot.tree.command(name="comps", description="Display per comp what items are required to run it one extra time (with new algorithm)")
 @app_commands.describe(
-    headers_only="If true skip each multibuy"
+    headers_only="If true skip each multibuy",
+    only_comp="Only display items for that comp id"
 )
 @command_error_handler
-async def comps(interaction: Interaction, headers_only: bool = False):
+async def comps(interaction: Interaction, headers_only: bool = False, only_comp: int | None = None):
     logger.info(f"{interaction.user.name} used /missing")
 
     if int(interaction.user.id) not in allowed_users:
@@ -300,6 +301,10 @@ async def comps(interaction: Interaction, headers_only: bool = False):
         total_items += assets.item_counts()
 
     for i, (comp_name, comp_items) in enumerate(comp_requirements):
+        if only_comp is not None:
+            if i != only_comp:
+                continue
+
         spare_items = copy.copy(total_items)
         satisfaction_count = 0
 
