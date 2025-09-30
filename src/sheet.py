@@ -3,7 +3,6 @@ from googleapiclient import discovery
 from collections import Counter
 import os
 
-
 def lines_to_counter(lines):
     items = Counter()
     for item in lines:
@@ -25,8 +24,11 @@ def eft_to_counter(eft):
     title_item = sections[0].split(",")[0].strip("[]")
     ship_counter = Counter()
     ship_counter[title_item] += 1
-    all_counter = lines_to_counter(sections[0].splitlines()) + lines_to_counter(
-        "\n".join(sections[1:]).splitlines()) + ship_counter
+    all_counter = (
+        lines_to_counter(sections[0].splitlines()) +
+        lines_to_counter("\n".join(sections[1:]).splitlines()) +
+        ship_counter
+    )
 
     # Ignore FLAG fitting
     if "FLAG" in eft:
@@ -37,18 +39,24 @@ def eft_to_counter(eft):
 
 def fetch_requirements():
     sheet_service = get_sheet_service()
-    result = sheet_service.spreadsheets().values().get(spreadsheetId=os.environ["SPREADSHEET_ID"],
-                                                       range=os.environ["RANGE"]).execute()
+    result = sheet_service.spreadsheets().values().get(
+        spreadsheetId=os.environ["SPREADSHEET_ID"],
+        range=os.environ["RANGE"]
+    ).execute()
     inputs = result.get('values', [])
 
     comp_requirements = []
     all_counter = Counter()
     ship_counter = Counter()
+    total_counter = Counter()
+
     for row in inputs:
         eft = row[0] if row else ""
         if "Fit" in eft:
             if all_counter:
-                comp_requirements.append((ship_counter, all_counter))
+                comp_name =  ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+                comp_requirements.append((comp_name, all_counter))
+                total_counter = max(all_counter, total_counter)
             all_counter = Counter()
             ship_counter = Counter()
         elif "[" in eft:
@@ -56,7 +64,7 @@ def fetch_requirements():
             ship_counter += ship_local
             all_counter += all_local
 
-    return comp_requirements
+    return comp_requirements, total_counter
 
 # Google Sheets setup
 def get_sheet_service():

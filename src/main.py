@@ -278,51 +278,13 @@ async def get_all_assets():
             else:
                 yield a
 
-# Satisfaction command
-@bot.tree.command(name="satisfaction", description="Check how many times each requirement set is fully satisfied by your assets.")
+
+@bot.tree.command(name="comps", description="Display per comp what items are required to run it one extra time (with new algorithm)")
+@app_commands.describe(
+    headers_only="If true skip each multibuy"
+)
 @command_error_handler
-async def satisfaction(interaction: Interaction):
-    logger.info(f"{interaction.user.name} used /satisfaction")
-
-    if int(interaction.user.id) not in allowed_users:
-        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
-        return
-
-    await interaction.response.defer()
-
-    await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
-
-    comp_requirements = fetch_requirements()
-    satisfaction_counts = collections.Counter()
-
-    async for assets in get_all_assets():
-        user_items = assets.item_counts()
-
-        for ship_counter, item_counter in comp_requirements:
-            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
-            comp_items = copy.copy(user_items)
-            satisfaction_counts[requirement_name] = 0
-
-            while True:
-                intersection = comp_items & item_counter
-                if intersection.total() != item_counter.total():
-                    break
-                comp_items -= item_counter
-                satisfaction_counts[requirement_name] += 1
-
-    if comp_requirements:
-        message = "**Satisfaction Counts:**\n"
-        for i, (requirement_name, count) in enumerate(satisfaction_counts.items()):
-            message += f"- Comp {i} x{count} (Ships: {requirement_name})\n"
-    else:
-        message = "No requirements provided!"
-
-    await send_large_followup(interaction, message, ephemeral=True)
-
-
-@bot.tree.command(name="missing", description="Check what is missing for each requirement set to be satisfied one more time.")
-@command_error_handler
-async def missing(interaction: Interaction):
+async def comps(interaction: Interaction, headers_only: bool = False):
     logger.info(f"{interaction.user.name} used /missing")
 
     if int(interaction.user.id) not in allowed_users:
@@ -332,46 +294,46 @@ async def missing(interaction: Interaction):
     await interaction.response.defer()
     await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
-    comp_requirements = fetch_requirements()
+    comp_requirements, total_requirements = fetch_requirements()
 
+    total_items = collections.Counter()
     async for assets in get_all_assets():
-        user_items = assets.item_counts()
+        total_items += assets.item_counts()
 
-        for i, (ship_counter, item_counter) in enumerate(comp_requirements):
-            comp_items = copy.copy(user_items)
-            satisfaction_count = 0
+    for i, (comp_name, comp_items) in enumerate(comp_requirements):
+        spare_items = copy.copy(total_items)
+        satisfaction_count = 0
 
-            while True:
-                intersection = comp_items & item_counter
-                if intersection.total() != item_counter.total():
-                    missing_items = item_counter - intersection
-                    break
-                comp_items -= item_counter
-                satisfaction_count += 1
+        while True:
+            intersection = spare_items & comp_items
+            if intersection.total() != comp_items.total():
+                missing_items = comp_items - intersection
+                break
+            # New algorithm
+            # Remove all items that are in this comp, but in the amount of the highest comp anywhere
+            used_up_items = collections.Counter({item: max(comp_items[item], total_requirements.get(item, 0)) for item in comp_items})
+            spare_items -= used_up_items
+            satisfaction_count += 1
 
-            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
+        if satisfaction_count > 0:
+            message = f"**Comp {i} is satisfied {satisfaction_count} times ({comp_name})**\n"
+        else:
+            message = f"**Comp {i} is not satisfied yet ({comp_name})**\n"
+            message += f"Missing the following items:\n```"
 
-            if satisfaction_count > 0:
-                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
-                message += f"To satisfy it one more time, you need:\n```"
-            else:
-                message = f"**Comp {i} is not satisfied yet (Ships: {requirement_name})**\n"
-                message += f"Missing the following items:\n```"
-
+        if not headers_only:
+            message += f"To satisfy it one more time, you need:\n```"
             for item, count in missing_items.items():
                 message += f"{item} x{count}\n"
             message += "```"
 
-            await send_large_followup(interaction, message, ephemeral=True)
-
-    if not comp_requirements:
-        await interaction.followup.send("No requirements provided.")
+        await send_large_followup(interaction, message, ephemeral=True)
 
 
-@bot.tree.command(name="all", description="Check what is missing for each requirement set to be satisfied one more time.")
+@bot.tree.command(name="all", description="Display items required to run any comp one time")
 @command_error_handler
 async def all(interaction: Interaction):
-    logger.info(f"{interaction.user.name} used /all")
+    logger.info(f"{interaction.user.name} used /missing")
 
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
@@ -380,44 +342,14 @@ async def all(interaction: Interaction):
     await interaction.response.defer()
     await interaction.followup.send("Fetching assets and requirements...", ephemeral=True)
 
-    comp_requirements = fetch_requirements()
-    all_missing_items = collections.Counter()
+    _, total_requirements = fetch_requirements()
 
-    async for assets in get_all_assets():
-        user_items = assets.item_counts()
+    message = f"To run any comp once, you need:\n```"
+    for item, count in total_requirements.items():
+        message += f"{item} x{count}\n"
+    message += "```"
 
-        for i, (ship_counter, item_counter) in enumerate(comp_requirements):
-            comp_items = copy.copy(user_items)
-            satisfaction_count = 0
-
-            while True:
-                intersection = comp_items & item_counter
-                if intersection.total() != item_counter.total():
-                    missing_items = item_counter - intersection
-                    break
-                comp_items -= item_counter
-                satisfaction_count += 1
-
-            requirement_name = ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
-
-            if satisfaction_count > 0:
-                message = f"**Comp {i} is satisfied {satisfaction_count} times (Ships: {requirement_name})**\n"
-            else:
-                all_missing_items = all_missing_items | missing_items
-                message = f"**Comp {i} is not satisfied yet (Ships: {requirement_name})**\n"
-
-            await interaction.followup.send(message)
-
-        message = f"**Total missing items to run everything once**\n```"
-        for item, count in all_missing_items.items():
-            message += f"{item} x{count}\n"
-        message += "```"
-
-        await send_large_followup(interaction, message, ephemeral=True)
-
-    if not comp_requirements:
-        await interaction.followup.send("No requirements provided.")
-
+    await send_large_followup(interaction, message, ephemeral=True)
 
 
 if __name__ == "__main__":
