@@ -3,7 +3,7 @@ import logging
 import os
 import secrets
 from io import BytesIO, StringIO
-from typing import Literal
+from typing import Literal, Optional
 import copy
 
 import discord
@@ -285,7 +285,7 @@ async def get_all_assets():
     only_comp="Only display items for that comp id"
 )
 @command_error_handler
-async def comps(interaction: Interaction, headers_only: bool = False, only_comp: int | None = None):
+async def comps(interaction: Interaction, headers_only: bool = False, only_comp: Optional[int] = None):
     logger.info(f"{interaction.user.name} used /missing")
 
     if int(interaction.user.id) not in allowed_users:
