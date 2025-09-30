@@ -291,7 +291,7 @@ async def comps(interaction: Interaction, headers_only: bool = False):
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     comp_requirements, total_requirements = fetch_requirements()
 
@@ -337,7 +337,7 @@ async def all(interaction: Interaction):
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     _, total_requirements = fetch_requirements()
 
