@@ -16,7 +16,7 @@ from assets import Assets
 from callback_server import callback_server
 from models import initialize_database, User, Challenge, CorporationCharacter, Character
 from sheet import fetch_requirements
-from utils import lookup, command_error_handler, send_large_followup
+from utils import lookup, command_error_handler, send_large_followup, create_buy_list_file
 
 # Configure the logger
 logger = logging.getLogger('discord.main')
@@ -326,14 +326,6 @@ def req_after_req_runs(
         satisfaction_count += 1
 
 
-def buy_list(items: Counter):
-    message = f"```"
-    for item, count in items.items():
-        message += f"{item} x{count}\n"
-    message += "```"
-    return message
-
-
 @bot.tree.command(name="all", description="Display items required to run any comp one time")
 @command_error_handler
 async def all(interaction: Interaction):
@@ -347,22 +339,21 @@ async def all(interaction: Interaction):
     comp_requirements, _ = fetch_requirements()
     total_requirements = calc_total_requirements(comp_requirements)
 
-    missing_items, satisfaction_count = req_runs(total_items, total_requirements)
-    message = f"We can run any comp {satisfaction_count} times.\n+1 means buying\n"
-    message += buy_list(missing_items)
-    await send_large_followup(interaction, message, ephemeral=True)
+    files = []
+    message = ""
 
-    message = f"If we want to buy a full set\n"
-    message += buy_list(total_requirements)
-    await send_large_followup(interaction, message, ephemeral=True)
+    missing_items, satisfaction_count = req_runs(total_items, total_requirements)
+    message += f"We can run any comp {satisfaction_count} times.\n"
+    files.append(create_buy_list_file(missing_items, "all_any_before_buy"))
+
+    files.append(create_buy_list_file(missing_items, "all_p1_buy"))
+
+    await send_large_followup(interaction, message, ephemeral=True, files=files)
 
 
 @bot.tree.command(name="comps", description="Break down per comp what we have")
-@app_commands.describe(
-    selected_comp_name="Only display items for that comp id"
-)
 @command_error_handler
-async def comps(interaction: Interaction, selected_comp_name: Optional[str] = None):
+async def comps(interaction: Interaction):
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
@@ -375,9 +366,8 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
     comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
     for comp_name, comp_requirement in comp_requirements.items():
-        if selected_comp_name is not None:
-            if comp_name != selected_comp_name:
-                continue
+
+        comp_name_clean = comp_name.replace(" ", "_").lower()
 
         archetype_id = -1
         for i, a in enumerate(comp_archetypes):
@@ -385,37 +375,24 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
                 archetype_id = i
 
         message = f"**Comp `{comp_name}`** (A {archetype_id})\n"
+        files = []
 
         missing_items, satisfaction_count = req_runs(total_items, comp_requirement)
         message += f"- Can be run standalone {satisfaction_count} times.\n"
-        if selected_comp_name is not None:
-            message += "  +1 means buying\n"
-            message += buy_list(missing_items)
-            await send_large_followup(interaction, message, ephemeral=True)
-            message = ""
+        files.append(create_buy_list_file(missing_items, f"{comp_name_clean}_self_before_buy"))
 
         missing_items, satisfaction_count = req_after_req_runs(total_items, comp_requirement, total_requirements)
         message += f"- We can run any other comp {satisfaction_count} times befoe running this comp once.\n"
-        if selected_comp_name is not None:
-            message += "  +1 means buying\n"
-            message += buy_list(missing_items)
-            await send_large_followup(interaction, message, ephemeral=True)
-            message = ""
+        files.append(create_buy_list_file(missing_items, f"{comp_name_clean}_any_before_buy"))
 
         missing_items, satisfaction_count = req_after_req_runs(total_items, comp_requirement,
                                                                comp_archetype_requirements[comp_name])
         message += f"- We can run a comp in this archetype {satisfaction_count} times befoe running this comp once.\n"
-        if selected_comp_name is not None:
-            message += "  +1 means buying\n"
-            message += buy_list(missing_items)
-            await send_large_followup(interaction, message, ephemeral=True)
-            message = ""
+        files.append(create_buy_list_file(missing_items, f"{comp_name_clean}_arch_before_buy"))
 
-        if selected_comp_name is not None:
-            message += f"- Standalone +1 means buying\n"
-            message += buy_list(comp_requirement)
+        files.append(create_buy_list_file(missing_items, f"{comp_name_clean}_p1_buy"))
 
-        await send_large_followup(interaction, message, ephemeral=True)
+        await send_large_followup(interaction, message, ephemeral=True, files=files)
 
 
 @bot.tree.command(name="archetypes", description="Break down per archetype what we have")
@@ -441,6 +418,7 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
                 continue
 
         message = f"**Archetype {i}**\n"
+        files = []
 
         message += f"- Comps:\n"
         for comp_name in arch_comps:
@@ -448,48 +426,16 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
 
         missing_items, satisfaction_count = req_runs(total_items, comp_archetype_requirements[arch_comps[0]])
         message += f"- Can be run standalone {satisfaction_count} times.\n"
-        if only_archetype is not None:
-            message += "  +1 means buying\n"
-            message += buy_list(missing_items)
-            await send_large_followup(interaction, message, ephemeral=True)
-            message = ""
+        files.append(create_buy_list_file(missing_items, f"archetype{i}_arch_before_buy"))
 
         missing_items, satisfaction_count = req_after_req_runs(total_items, comp_archetype_requirements[arch_comps[0]],
                                                                total_requirements)
         message += f"- We can run any other comp {satisfaction_count} times befoe running this arechetype once.\n"
-        if only_archetype is not None:
-            message += "  +1 means buying\n"
-            message += buy_list(missing_items)
-            await send_large_followup(interaction, message, ephemeral=True)
-            message = ""
+        files.append(create_buy_list_file(missing_items, f"archetype{i}_any_before_buy"))
 
-        if only_archetype is not None:
-            message += f"- Standalone +1 means buying\n"
-            message += buy_list(comp_archetype_requirements[arch_comps[0]])
+        files.append(create_buy_list_file(comp_archetype_requirements[arch_comps[0]], f"archetype{i}_p1_buy"))
 
         await send_large_followup(interaction, message, ephemeral=True)
-
-
-@bot.tree.command(name="items", description="Show items of all linked characters")
-@command_error_handler
-async def items(interaction: Interaction):
-    if int(interaction.user.id) not in allowed_users:
-        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-
-    message = ""
-
-    for user in User.select():
-        for character in user.characters:
-            a = Assets(base_preston.authenticate_from_token(character.token))
-            await a.fetch()
-
-            message += f"Character {character.character_id}:\n"
-            message + buy_list(a.item_counts())
-
-    await send_large_followup(interaction, message, ephemeral=True)
 
 
 if __name__ == "__main__":

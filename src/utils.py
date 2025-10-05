@@ -1,6 +1,8 @@
+import io
 import logging
+from collections import Counter
 
-from preston import Preston
+import discord
 
 logger = logging.getLogger("discord.main.utils")
 import functools
@@ -51,7 +53,7 @@ def command_error_handler(func):
     return wrapper
 
 
-async def send_large_followup(interaction, message, max_chars=1994, delimiter='\n', **kwargs):
+async def send_large_followup(interaction, message, max_chars=1994, delimiter='\n', files=None, **kwargs):
     """
     Safely sends a message longer than Discord's character limit by splitting it
     while preserving code block integrity.
@@ -61,27 +63,27 @@ async def send_large_followup(interaction, message, max_chars=1994, delimiter='\
         message (str): The message to send (potentially long).
         max_chars (int): Max allowed characters per message (default: 1994 for safety).
         delimiter (str): Preferred splitting character (default: newline).
+        files (list): List of files to send.
         **kwargs: Extra arguments forwarded to followup.send (like ephemeral=True).
     """
     open_code_block = False
 
     while len(message) > 0:
-        if len(message) <= max_chars:
-            if open_code_block:
-                message = f"```{message}"
-            await interaction.followup.send(message, **kwargs)
-            break
+        is_last = len(message) <= max_chars
 
-        # Find last delimiter within limit
-        last_delim_index = message.rfind(delimiter, 0, max_chars)
-        if last_delim_index == -1:
-            part = message[:max_chars]
-            message = message[max_chars:]
+        if is_last:
+            part = message
+            message = ""
         else:
-            part = message[:last_delim_index]
-            message = message[last_delim_index + 1:]
+            last_delim_index = message.rfind(delimiter, 0, max_chars)
+            if last_delim_index == -1:
+                part = message[:max_chars]
+                message = message[max_chars:]
+            else:
+                part = message[:last_delim_index]
+                message = message[last_delim_index + 1:]
 
-        # Handle code blocks
+        # Handle code block integrity
         code_block_count = part.count("```")
         if open_code_block:
             part = f"```{part}"
@@ -90,4 +92,29 @@ async def send_large_followup(interaction, message, max_chars=1994, delimiter='\
         if open_code_block:
             part = f"{part}```"
 
-        await interaction.followup.send(part, **kwargs)
+        # Only attach files to the final message
+        if is_last:
+            await interaction.followup.send(part, files=files, **kwargs)
+        else:
+            await interaction.followup.send(part, **kwargs)
+
+
+
+def create_buy_list_file(items: Counter, name: str = "buy_list") -> discord.File:
+    """
+    Creates an in-memory text file containing the buy list.
+
+    Parameters:
+        items (Counter): Item name → quantity mapping.
+        name (str): File name prefix.
+
+    Returns:
+        discord.File: The attachment ready to send.
+    """
+    content = ""
+    for item, count in items.items():
+        content += f"{item} x{count}\n"
+
+    # Create in-memory file
+    file_obj = io.BytesIO(content.encode())
+    return discord.File(file_obj, filename=f"{name}.txt")
