@@ -416,13 +416,12 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
         await send_large_followup(interaction, message, ephemeral=True)
 
 
-@ bot.tree.command(name="comps", description="Break down per arcehtype what we have")
+@bot.tree.command(name="comps", description="Break down per arcehtype what we have")
 @app_commands.describe(
     only_archetype="Display details for this archetype",
 )
 @command_error_handler
 async def archetypes(interaction: Interaction, only_archetype: Optional[int] = None):
-
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
@@ -433,7 +432,6 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
     comp_requirements, comp_archetypes = fetch_requirements()
     total_requirements = calc_total_requirements(comp_requirements)
     comp_archetype_requirements = calc_archetype_requirements(comp_archetypes, comp_archetypes)
-
 
     for i, arch_comps in comp_archetypes.items():
         if only_archetype is not None:
@@ -452,7 +450,8 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
             message += "  +1 means buying\n"
             message += buy_list(missing_items)
 
-        missing_items, satisfaction_count = req_after_req_runs(total_items, comp_archetype_requirements[arch_comps[0]], total_requirements)
+        missing_items, satisfaction_count = req_after_req_runs(total_items, comp_archetype_requirements[arch_comps[0]],
+                                                               total_requirements)
         message += f"- We can run any other comp {satisfaction_count} times befoe running this arechetype once.\n"
         if only_archetype is not None:
             message += "  +1 means buying\n"
