@@ -346,7 +346,7 @@ async def all(interaction: Interaction):
     message += f"We can run any comp {satisfaction_count} times.\n"
     files.append(create_buy_list_file(missing_items, "all_any_before_buy"))
 
-    files.append(create_buy_list_file(missing_items, "all_p1_buy"))
+    files.append(create_buy_list_file(total_requirements, "all_p1_buy"))
 
     await send_large_followup(interaction, message, ephemeral=True, files=files)
 
