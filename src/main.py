@@ -396,11 +396,8 @@ async def comps(interaction: Interaction):
 
 
 @bot.tree.command(name="archetypes", description="Break down per archetype what we have")
-@app_commands.describe(
-    only_archetype="Display details for this archetype",
-)
 @command_error_handler
-async def archetypes(interaction: Interaction, only_archetype: Optional[int] = None):
+async def archetypes(interaction: Interaction):
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
@@ -413,10 +410,6 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
     comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
     for i, arch_comps in comp_archetypes.items():
-        if only_archetype is not None:
-            if only_archetype != i:
-                continue
-
         message = f"**Archetype {i}**\n"
         files = []
 
