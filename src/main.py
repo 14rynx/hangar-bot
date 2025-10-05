@@ -298,8 +298,8 @@ def req_runs(
 
     while True:
         intersection = spare_items & requirement
-        if intersection.total() != spare_items.total():
-            missing_items = spare_items - intersection
+        if intersection.total() != requirement.total():
+            missing_items = requirement - intersection
             return missing_items, satisfaction_count
         spare_items -= requirement
         satisfaction_count += 1
@@ -319,8 +319,8 @@ def req_after_req_runs(
 
     while True:
         intersection = spare_items & second_req
-        if intersection.total() != spare_items.total():
-            missing_items = spare_items - intersection
+        if intersection.total() != second_req.total():
+            missing_items = second_req - intersection
             return missing_items, satisfaction_count - 1
         spare_items -= iter_requirement
         satisfaction_count += 1
