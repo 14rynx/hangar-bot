@@ -410,6 +410,9 @@ async def archetypes(interaction: Interaction):
     comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
     for i, arch_comp_names in enumerate(comp_archetypes):
+        if len(arch_comp_names) == 0:
+            continue
+
         arch_requirement = comp_archetype_requirements[arch_comp_names[0]]
 
         message = f"**Archetype {i}**\n"
