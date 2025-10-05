@@ -417,7 +417,7 @@ async def archetypes(interaction: Interaction):
 
         message += f"- Comps:\n"
         for comp_name in arch_comp_names:
-            message += f" - {comp_name}\n"
+            message += f"  - {comp_name}\n"
 
         missing_items, satisfaction_count = req_runs(total_items, arch_requirement)
         message += f"- Can be run standalone {satisfaction_count} times.\n"
