@@ -337,8 +337,6 @@ def buy_list(items: Counter):
 @bot.tree.command(name="all", description="Display items required to run any comp one time")
 @command_error_handler
 async def all(interaction: Interaction):
-    logger.info(f"{interaction.user.name} used /all")
-
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
@@ -365,8 +363,6 @@ async def all(interaction: Interaction):
 )
 @command_error_handler
 async def comps(interaction: Interaction, selected_comp_name: Optional[str] = None):
-    logger.info(f"{interaction.user.name} used /comps")
-
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
@@ -467,8 +463,6 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
 @bot.tree.command(name="items", description="Show items of all linked characters")
 @command_error_handler
 async def items(interaction: Interaction):
-    logger.info(f"{interaction.user.name} used /all")
-
     if int(interaction.user.id) not in allowed_users:
         await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
         return
