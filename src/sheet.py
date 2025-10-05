@@ -45,26 +45,58 @@ def fetch_requirements():
     ).execute()
     inputs = result.get('values', [])
 
-    comp_requirements = []
-    all_counter = Counter()
+    comp_requirements = {}
+    item_counter = Counter()
     ship_counter = Counter()
-    total_counter = Counter()
+
+    # Archetype
+    other_line_count = 0
+    comp_names = []
+    comp_archetypes = []
 
     for row in inputs:
-        eft = row[0] if row else ""
-        if "Fit" in eft:
-            if all_counter:
-                comp_name =  ", ".join([f"{key} x{value}" for key, value in ship_counter.items()])
-                comp_requirements.append((comp_name, all_counter))
-                total_counter = all_counter | total_counter
-            all_counter = Counter()
-            ship_counter = Counter()
-        elif "[" in eft:
-            ship_local, all_local = eft_to_counter(eft)
-            ship_counter += ship_local
-            all_counter += all_local
+        content = row[0] if row else ""
+        if "Fit" in content:
+            other_line_count = 0
 
-    return comp_requirements, total_counter
+            # We have completed the previous comp
+            if item_counter:
+                # Make a unique name
+                comp_name =  ", ".join([f"{key:5} x{value}" for key, value in ship_counter.items()])
+                while comp_name in comp_requirements:
+                    comp_name += " - copy" # VLD Style
+
+                comp_requirements[comp_name] = item_counter
+                comp_names.append(comp_name)
+                item_counter = Counter()
+                ship_counter = Counter()
+        elif "[" in content: # Line is an eft
+            other_line_count = 0
+            ship_local, all_local = eft_to_counter(content)
+            ship_counter += ship_local
+            item_counter += all_local
+        else:
+            other_line_count += 1
+            if other_line_count > 1:
+                # We have a new archetype
+                comp_archetypes.append(comp_names)
+                comp_names = []
+
+    # Store final comp
+    if item_counter:
+        # Make a unique name
+        comp_name = ", ".join([f"{key:5} x{value}" for key, value in ship_counter.items()])
+        while comp_name in comp_requirements:
+            comp_name += " - copy"  # VLD Style
+
+        comp_requirements[comp_name] = item_counter
+        comp_names.append(comp_name)
+
+    # Store final archetype
+    comp_archetypes.append(comp_names)
+
+    return comp_requirements, comp_archetypes
+
 
 # Google Sheets setup
 def get_sheet_service():
