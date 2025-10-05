@@ -350,10 +350,10 @@ async def all(interaction: Interaction):
     missing_items, satisfaction_count = req_runs(total_items, total_requirements)
     message = f"We can run any comp {satisfaction_count} times.\n+1 means buying\n"
     message += buy_list(missing_items)
+    await send_large_followup(interaction, message, ephemeral=True)
 
-    message += f"If we want to buy a full set\n"
+    message = f"If we want to buy a full set\n"
     message += buy_list(total_requirements)
-
     await send_large_followup(interaction, message, ephemeral=True)
 
 
@@ -391,12 +391,16 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
         if selected_comp_name is not None:
             message += "  +1 means buying\n"
             message += buy_list(missing_items)
+            await send_large_followup(interaction, message, ephemeral=True)
+            message = ""
 
         missing_items, satisfaction_count = req_after_req_runs(total_items, comp_requirement, total_requirements)
         message += f"- We can run any other comp {satisfaction_count} times befoe running this comp once.\n"
         if selected_comp_name is not None:
             message += "  +1 means buying\n"
             message += buy_list(missing_items)
+            await send_large_followup(interaction, message, ephemeral=True)
+            message = ""
 
         missing_items, satisfaction_count = req_after_req_runs(total_items, comp_requirement,
                                                                comp_archetype_requirements[comp_name])
@@ -404,6 +408,8 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
         if selected_comp_name is not None:
             message += "  +1 means buying\n"
             message += buy_list(missing_items)
+            await send_large_followup(interaction, message, ephemeral=True)
+            message = ""
 
         if selected_comp_name is not None:
             message += f"- Standalone +1 means buying\n"
@@ -445,6 +451,8 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
         if only_archetype is not None:
             message += "  +1 means buying\n"
             message += buy_list(missing_items)
+            await send_large_followup(interaction, message, ephemeral=True)
+            message = ""
 
         missing_items, satisfaction_count = req_after_req_runs(total_items, comp_archetype_requirements[arch_comps[0]],
                                                                total_requirements)
@@ -452,6 +460,8 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
         if only_archetype is not None:
             message += "  +1 means buying\n"
             message += buy_list(missing_items)
+            await send_large_followup(interaction, message, ephemeral=True)
+            message = ""
 
         if only_archetype is not None:
             message += f"- Standalone +1 means buying\n"
