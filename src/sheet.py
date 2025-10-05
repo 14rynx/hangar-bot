@@ -58,7 +58,6 @@ def fetch_requirements():
         content = row[0] if row else ""
         if "Fit" in content:
             other_line_count = 0
-
             # We have completed the previous comp
             if item_counter:
                 # Make a unique name
@@ -76,7 +75,7 @@ def fetch_requirements():
             ship_counter += ship_local
             item_counter += all_local
         else:
-            if other_line_count > 1:
+            if other_line_count > 0:
                 # We have a new archetype
                 comp_archetypes.append(comp_names)
                 comp_names = []
