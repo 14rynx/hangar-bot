@@ -429,6 +429,8 @@ async def archetypes(interaction: Interaction):
 
         files.append(create_buy_list_file(arch_requirement, f"archetype{i}_p1_buy"))
 
+        logger.info(files)
+
         await send_large_followup(interaction, message, ephemeral=True)
 
 
