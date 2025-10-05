@@ -78,6 +78,7 @@ def fetch_requirements():
         else:
             other_line_count += 1
             if other_line_count > 1:
+                other_line_count = -999999
                 # We have a new archetype
                 comp_archetypes.append(comp_names)
                 comp_names = []
