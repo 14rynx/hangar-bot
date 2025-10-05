@@ -85,9 +85,9 @@ def fetch_requirements():
     # Store final comp
     if item_counter:
         # Make a unique name
-        comp_name = ", ".join([f"{key:5} x{value}" for key, value in ship_counter.items()])
+        comp_name = ", ".join([f"{key} x{value}" if (value > 1) else key for key, value in ship_counter.items()])
         while comp_name in comp_requirements:
-            comp_name += " - copy"  # VLD Style
+            comp_name += " copy"  # VLD Style
 
         comp_requirements[comp_name] = item_counter
         comp_names.append(comp_name)
