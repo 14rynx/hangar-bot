@@ -76,12 +76,12 @@ def fetch_requirements():
             ship_counter += ship_local
             item_counter += all_local
         else:
-            other_line_count += 1
             if other_line_count > 1:
-                other_line_count = -999999
                 # We have a new archetype
                 comp_archetypes.append(comp_names)
                 comp_names = []
+            else:
+                other_line_count += 1
 
     # Store final comp
     if item_counter:
