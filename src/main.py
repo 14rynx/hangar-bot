@@ -376,7 +376,7 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
     total_items = await get_all_assets()
     comp_requirements, comp_archetypes = fetch_requirements()
     total_requirements = calc_total_requirements(comp_requirements)
-    comp_archetype_requirements = calc_archetype_requirements(comp_archetypes, comp_archetypes)
+    comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
     for comp_name, comp_requirement in comp_requirements.items():
         if selected_comp_name is not None:
@@ -416,7 +416,7 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
         await send_large_followup(interaction, message, ephemeral=True)
 
 
-@bot.tree.command(name="archetypes", description="Break down per arcehtype what we have")
+@bot.tree.command(name="archetypes", description="Break down per archetype what we have")
 @app_commands.describe(
     only_archetype="Display details for this archetype",
 )
@@ -431,7 +431,7 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
     total_items = await get_all_assets()
     comp_requirements, comp_archetypes = fetch_requirements()
     total_requirements = calc_total_requirements(comp_requirements)
-    comp_archetype_requirements = calc_archetype_requirements(comp_archetypes, comp_archetypes)
+    comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
     for i, arch_comps in comp_archetypes.items():
         if only_archetype is not None:
@@ -462,6 +462,30 @@ async def archetypes(interaction: Interaction, only_archetype: Optional[int] = N
             message += buy_list(comp_archetype_requirements[arch_comps[0]])
 
         await send_large_followup(interaction, message, ephemeral=True)
+
+
+@bot.tree.command(name="items", description="Show items of all linked characters")
+@command_error_handler
+async def items(interaction: Interaction):
+    logger.info(f"{interaction.user.name} used /all")
+
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    message = ""
+
+    for user in User.select():
+        for character in user.characters:
+            a = Assets(base_preston.authenticate_from_token(character.token))
+            await a.fetch()
+
+            message += f"Character {character.character_id}:\n"
+            message + buy_list(a.item_counts())
+
+    await send_large_followup(interaction, message, ephemeral=True)
 
 
 if __name__ == "__main__":
