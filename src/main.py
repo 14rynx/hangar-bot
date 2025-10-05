@@ -409,24 +409,25 @@ async def archetypes(interaction: Interaction):
     total_requirements = calc_total_requirements(comp_requirements)
     comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
-    for i, arch_comps in comp_archetypes.items():
+    for i, arch_comp_names in enumerate(comp_archetypes):
+        arch_requirement = comp_archetype_requirements[arch_comp_names[0]]
+
         message = f"**Archetype {i}**\n"
         files = []
 
         message += f"- Comps:\n"
-        for comp_name in arch_comps:
+        for comp_name in arch_comp_names:
             message += f" - {comp_name}\n"
 
-        missing_items, satisfaction_count = req_runs(total_items, comp_archetype_requirements[arch_comps[0]])
+        missing_items, satisfaction_count = req_runs(total_items, arch_requirement)
         message += f"- Can be run standalone {satisfaction_count} times.\n"
         files.append(create_buy_list_file(missing_items, f"archetype{i}_arch_before_buy"))
 
-        missing_items, satisfaction_count = req_after_req_runs(total_items, comp_archetype_requirements[arch_comps[0]],
-                                                               total_requirements)
+        missing_items, satisfaction_count = req_after_req_runs(total_items,arch_requirement, total_requirements)
         message += f"- We can run any other comp {satisfaction_count} times befoe running this arechetype once.\n"
         files.append(create_buy_list_file(missing_items, f"archetype{i}_any_before_buy"))
 
-        files.append(create_buy_list_file(comp_archetype_requirements[arch_comps[0]], f"archetype{i}_p1_buy"))
+        files.append(create_buy_list_file(arch_requirement, f"archetype{i}_p1_buy"))
 
         await send_large_followup(interaction, message, ephemeral=True)
 
