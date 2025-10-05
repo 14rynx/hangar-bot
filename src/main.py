@@ -367,7 +367,7 @@ async def comps(interaction: Interaction):
 
     for comp_name, comp_requirement in comp_requirements.items():
 
-        comp_name_clean = " ".join(comp_name.lower().split().replace(",", " ")).replace(" ", "_")
+        comp_name_clean = " ".join(comp_name.lower().replace(",", " ").split()).replace(" ", "_")
 
         archetype_id = -1
         for i, a in enumerate(comp_archetypes):
