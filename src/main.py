@@ -416,7 +416,7 @@ async def comps(interaction: Interaction, selected_comp_name: Optional[str] = No
         await send_large_followup(interaction, message, ephemeral=True)
 
 
-@bot.tree.command(name="comps", description="Break down per arcehtype what we have")
+@bot.tree.command(name="archetypes", description="Break down per arcehtype what we have")
 @app_commands.describe(
     only_archetype="Display details for this archetype",
 )
