@@ -297,9 +297,9 @@ def req_runs(
     satisfaction_count = 0
 
     while True:
-        intersection = spare_items & total_items
-        if intersection.total() != total_items.total():
-            missing_items = total_items - intersection
+        intersection = spare_items & requirement
+        if intersection.total() != spare_items.total():
+            missing_items = spare_items - intersection
             return missing_items, satisfaction_count
         spare_items -= requirement
         satisfaction_count += 1
@@ -318,9 +318,9 @@ def req_after_req_runs(
         {item: max(second_req[item], first_repeated_req.get(item, 0)) for item in second_req})
 
     while True:
-        intersection = spare_items & total_items
-        if intersection.total() != total_items.total():
-            missing_items = total_items - intersection
+        intersection = spare_items & second_req
+        if intersection.total() != spare_items.total():
+            missing_items = spare_items - intersection
             return missing_items, satisfaction_count - 1
         spare_items -= iter_requirement
         satisfaction_count += 1
