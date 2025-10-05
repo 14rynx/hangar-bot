@@ -54,6 +54,8 @@ def fetch_requirements():
     comp_names = []
     comp_archetypes = []
 
+    next_is_new_arch = False
+
     for row in inputs:
         content = row[0] if row else ""
         if "Fit" in content:
@@ -67,6 +69,11 @@ def fetch_requirements():
 
                 comp_requirements[comp_name] = item_counter
                 comp_names.append(comp_name)
+                if next_is_new_arch:
+                    # We have a new archetype
+                    comp_archetypes.append(comp_names)
+                    comp_names = []
+
                 item_counter = Counter()
                 ship_counter = Counter()
         elif "[" in content: # Line is an eft
@@ -75,10 +82,9 @@ def fetch_requirements():
             ship_counter += ship_local
             item_counter += all_local
         else:
+            next_is_new_arch = False
             if other_line_count > 0:
-                # We have a new archetype
-                comp_archetypes.append(comp_names)
-                comp_names = []
+                next_is_new_arch = True
             else:
                 other_line_count += 1
 
