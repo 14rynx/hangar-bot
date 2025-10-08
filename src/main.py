@@ -438,7 +438,7 @@ async def archetypes(interaction: Interaction):
 
 @bot.tree.command(name="missing", description="Given a list of archetype runs show what is missing")
 @app_commands.describe(
-    runs="Runs per archetype Use e.g. `0 1x, 1 2x, 5 3x`",
+    runs="Runs per archetype Use e.g. `1x0, 1x2, 3x5`",
 )
 @command_error_handler
 async def missing(interaction: Interaction, runs: str):
@@ -448,11 +448,11 @@ async def missing(interaction: Interaction, runs: str):
 
     await interaction.response.defer(ephemeral=True)
 
-    pattern = r"(\d+)\s+(\d+)x"
+    pattern = r"(\d+)x(\d+)"
     archetype_list = re.findall(pattern, runs)
 
     if not archetype_list:
-        await interaction.followup.send("Invalid format. Use e.g. `0 1x, 1 2x, 5 3x`", ephemeral=True)
+        await interaction.followup.send("Invalid format. Use e.g. `1x0, 1x2, 5x3`", ephemeral=True)
         return
 
     archetype_counts = {int(a): int(q) for a, q in archetype_list}
