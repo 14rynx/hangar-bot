@@ -455,7 +455,7 @@ async def missing(interaction: Interaction, runs: str):
         await interaction.followup.send("Invalid format. Use e.g. `1x0, 1x2, 5x3`", ephemeral=True)
         return
 
-    archetype_counts = {int(a): int(q) for a, q in archetype_list}
+    archetype_counts = {int(q): int(a) for a, q in archetype_list}
 
     total_items = await get_all_assets()
     comp_requirements, comp_archetypes = fetch_requirements()
