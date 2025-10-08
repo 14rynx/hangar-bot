@@ -461,7 +461,7 @@ async def missing(interaction: Interaction, runs: str):
     comp_requirements, comp_archetypes = fetch_requirements()
     comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
 
-    combined_requirements = {}
+    combined_requirements = Counter()
 
     for arch_id, count in archetype_counts.items():
         if arch_id >= len(comp_archetypes) or len(comp_archetypes[arch_id]) == 0:
