@@ -5,6 +5,7 @@ import os
 import secrets
 from collections import Counter
 from typing import Literal, Optional
+import re
 
 import discord
 import requests
@@ -426,13 +427,64 @@ async def archetypes(interaction: Interaction):
         message += f"- Can be run standalone {satisfaction_count} times.\n"
         files.append(create_buy_list_file(missing_items, f"archetype{i}_arch_before_buy"))
 
-        missing_items, satisfaction_count = req_after_req_runs(total_items,arch_requirement, total_requirements)
+        missing_items, satisfaction_count = req_after_req_runs(total_items, arch_requirement, total_requirements)
         message += f"- We can run any other comp {satisfaction_count} times befoe running this arechetype once.\n"
         files.append(create_buy_list_file(missing_items, f"archetype{i}_any_before_buy"))
 
         files.append(create_buy_list_file(arch_requirement, f"archetype{i}_p1_buy"))
 
         await send_large_followup(interaction, message, ephemeral=True, files=files)
+
+
+@bot.tree.command(name="missing", description="Given a list of archetype runs show what is missing")
+@app_commands.describe(
+    runs="Runs per archetype Use e.g. `0 1x, 1 2x, 5 3x`",
+)
+@command_error_handler
+async def missing(interaction: Interaction, runs: str):
+    if int(interaction.user.id) not in allowed_users:
+        await interaction.response.send_message("You are not allowed to use this command!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    pattern = r"(\d+)\s+(\d+)x"
+    archetype_list = re.findall(pattern, runs)
+
+    if not archetype_list:
+        await interaction.followup.send("Invalid format. Use e.g. `0 1x, 1 2x, 5 3x`", ephemeral=True)
+        return
+
+    archetype_counts = {int(a): int(q) for a, q in archetype_list}
+
+    total_items = await get_all_assets()
+    comp_requirements, comp_archetypes = fetch_requirements()
+    comp_archetype_requirements = calc_archetype_requirements(comp_requirements, comp_archetypes)
+
+    combined_requirements = {}
+
+    for arch_id, count in archetype_counts.items():
+        if arch_id >= len(comp_archetypes) or len(comp_archetypes[arch_id]) == 0:
+            continue
+
+        arch_name = comp_archetypes[arch_id][0]
+        arch_req = comp_archetype_requirements[arch_name]
+
+        for item, qty in arch_req.items():
+            combined_requirements[item] = combined_requirements.get(item, 0) + qty * count
+
+    missing_items, satisfaction_count = req_runs(total_items, combined_requirements)
+
+    files = [create_buy_list_file(missing_items, f"missing_archetypes")]
+
+    message = "**Missing Items for Requested Archetypes**\n"
+    message += "Archetypes requested:\n"
+    for arch_id, count in archetype_counts.items():
+        message += f"- Archetype {arch_id}: {count}x\n"
+
+    message += f"\nWe can complete {satisfaction_count} full set(s) from current stock.\n"
+
+    await send_large_followup(interaction, message, ephemeral=True, files=files)
 
 
 if __name__ == "__main__":
